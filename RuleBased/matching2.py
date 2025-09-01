@@ -2,16 +2,19 @@
 # Uses buckets.py and location_cache.py for core functionality
 
 import math
-from typing import List, Dict, Tuple, Optional
-from datetime import datetime, timezone
 from collections import defaultdict
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, Tuple
+
 import config
+import h3
 from domain import FlightInfo, Rider
+from location_cache import LocationCache
 from repository import Repository
 from service.audit import AuditLogger
-from location_cache import LocationCache
-from buckets import to_grid_id, haversine_m
-import h3
+
+from RuleBased.buckets import haversine_m, to_grid_id
+
 
 class MatchingEngine2:
     """Streamlined matching engine using direct approach"""
