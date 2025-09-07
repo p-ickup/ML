@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, time, datetime
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from datetime import date, datetime, time
+from typing import (Any, Dict, Iterable, List, Mapping, Optional, Sequence,
+                    Tuple)
 
 import h3
 import location_cache  # only needed if include_coords=True
@@ -183,8 +184,3 @@ def partition_riders(riders: Sequence[RiderLite]) -> Dict[BucketKey, Dict[str, A
         
     # return a copy of the buckets
     return {k: {"all": v["all"][:]} for k, v in buckets.items()}
-
-
-
-
-
