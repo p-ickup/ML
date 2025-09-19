@@ -6,16 +6,15 @@ Streamlined version that directly handles ride creation and matching
 
 import os
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import Dict, List
 
-# Third-party imports
-from supabase import create_client, Client
-
+from config import GRID_RES
 # Local imports
 from location_cache import LocationCache
-from buckets import prepare_riders, partition_riders
-from config import GRID_RES
+# Third-party imports
+from supabase import Client, create_client
 
+from RuleBased.buckets import partition_riders, prepare_riders
 
 # Load environment variables for Supabase and Google Maps API keys
 SUPABASE_URL = os.getenv("SUPABASE_URL")
