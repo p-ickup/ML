@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
-import config3 as config
+import config as config
 from rider_data import RiderLite
 
 
