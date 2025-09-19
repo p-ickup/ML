@@ -9,7 +9,7 @@ import os
 from datetime import datetime, timedelta
 from typing import List, Tuple
 
-from buckets2 import bucket_names, make_buckets
+from buckets import bucket_names, make_buckets
 from dotenv import load_dotenv
 from rider_data import RiderData, RiderLite
 from ruleMatching import Match, match_bucket
