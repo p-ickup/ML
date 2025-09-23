@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
+import audit
 import config as config
 from rider_data import RiderLite
 
@@ -156,16 +157,23 @@ def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) ->
 
 
 # perform matching inside a single bucket
-def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> Tuple[List[Match], List[RiderLite]]:
+def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> Tuple[List[Match], List[RiderLite], dict]:
     if len(riders) < 2:
-        return [], list(riders)
+        # singleton buckets
+        diag = {r.flight_id: {"bucket_key": bucket_key or "", "reason": "singleton_bucket", "details": {}} for r in riders}
+        return [], list(riders), diag
 
-    pairs = _build_scored_pairs(riders)
+    # build pairs + per-rider counters using audit
+    pairs, pair_diag = audit.build_scored_pairs_with_diag(
+        riders,
+        score_group=lambda members: _score_group(members, validate=True),
+    )
     if not pairs:
-        return [], list(riders)
+        diag = {r.flight_id: {"bucket_key": bucket_key or "", "reason": audit._top_reason(pair_diag.get(i, {})), "details": pair_diag.get(i, {})}
+                for i, r in enumerate(riders)}
+        return [], list(riders), diag
 
     idx_pairs = _select_pairs(pairs)
-
     used = set()
     matches: List[Match] = []
 
@@ -179,4 +187,7 @@ def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> T
         matches.append(_group_to_match(group, bucket_key=bucket_key))
 
     leftovers = [r for k, r in enumerate(riders) if k not in used]
-    return matches, leftovers
+
+    # compose diagnostics for leftovers
+    diag = audit.finalize_unmatched_diag(riders, bucket_key, pairs, pair_diag, used)
+    return matches, leftovers, diag

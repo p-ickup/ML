@@ -88,7 +88,35 @@ def _write_matches_csv(matches: List[Match], csv_path: str) -> None:
         w.writeheader()
         w.writerows(rows)
     print(f"Wrote dry-run CSV with {len(matches)} groups → {csv_path}")
-
+    
+def _write_unmatched_with_reasons(unmatched: List[RiderLite], reasons: dict, csv_path: str) -> None:
+    rows = []
+    for r in unmatched:
+        info = reasons.get(r.flight_id, {})
+        rows.append({
+            "user_id": r.user_id,
+            "flight_id": r.flight_id,
+            "airport": r.airport,
+            "to_airport": r.to_airport,
+            "date": r.date,
+            "earliest_time": r.earliest_time,
+            "latest_time": r.latest_time,
+            "bags_no": r.bags_no or 0,
+            "bags_no_large": r.bags_no_large or 0,
+            "terminal": r.terminal or "",
+            "bucket_key": info.get("bucket_key", ""),
+            "reason": info.get("reason", "unknown"),
+            "details": info.get("details", {}),
+        })
+    if not rows:
+        print("No unmatched riders to write.")
+        return
+    with open(csv_path, "w", newline="") as f:
+        import csv
+        w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        w.writeheader()
+        w.writerows(rows)
+    print(f"Wrote {len(rows)} unmatched riders with reasons → {csv_path}")
 
 # persist matches to Supabase (create one Rides row per group; insert Matches rows with SAME ride_id;
 # set Flights.matched = true; include earliest-overlap date/time and voucher_given=false)
@@ -146,12 +174,15 @@ def run(dry_run: bool = False, csv_path: str = "matches_dryrun.csv") -> None:
 
     all_matches: List[Match] = []
     all_unmatched: List[RiderLite] = []
+    all_diag: dict[int, dict] = {}  # <- collect reasons keyed by flight_id
+
 
     # iterate buckets and match
     for name, riders_in_bucket in buckets.items():
-        matches, leftovers = match_bucket(riders_in_bucket, bucket_key=name)
+        matches, leftovers, diag = match_bucket(riders_in_bucket, bucket_key=name)  # <- 3 values now
         all_matches.extend(matches)
         all_unmatched.extend(leftovers)
+        all_diag.update(diag)
 
     # report summary
     print(f"Buckets: {len(buckets)} | Groups: {len(all_matches)} | Unmatched: {len(all_unmatched)}")
@@ -159,6 +190,7 @@ def run(dry_run: bool = False, csv_path: str = "matches_dryrun.csv") -> None:
     # write output
     if dry_run:
         _write_matches_csv(all_matches, csv_path)
+        _write_unmatched_with_reasons(all_unmatched, all_diag, "../matches/unmatched_reasons_dryrun.csv")
     else:
         _write_matches_db(supabase, all_matches)
 
@@ -167,7 +199,7 @@ def run(dry_run: bool = False, csv_path: str = "matches_dryrun.csv") -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pickup matcher")
     parser.add_argument("--dry-run", action="store_true", help="do not write to DB; export CSV instead")
-    parser.add_argument("--csv", type=str, default="matches_dryrun.csv", help="CSV path for --dry-run output")
+    parser.add_argument("--csv", type=str, default="../matches/matches_dryrun.csv", help="CSV path for --dry-run output")
     args = parser.parse_args()
 
     run(dry_run=args.dry_run, csv_path=args.csv)
