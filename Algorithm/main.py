@@ -32,20 +32,17 @@ def _bags_total(r: RiderLite) -> int:
 
 # compute earliest intersection start for a group (date_str, time_str)
 def _match_datetime_from_earliest(m: Match) -> Tuple[str, str]:
-    starts = []
-    ends = []
+    starts, ends = [], []
     for r in m.riders:
         s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
         e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-        starts.append(s)
-        ends.append(e)
-    start = max(starts)          # earliest feasible start (begin of overlap)
-    end = min(ends)
-    # guard: if no real overlap, fallback to suggested midpoint already computed
-    if start >= end:
-        dt = datetime.fromisoformat(m.suggested_time_iso)
+        starts.append(s); ends.append(e)
+    latest_start = max(starts)
+    earliest_end = min(ends)
+    if earliest_end <= latest_start:
+        dt = latest_start  # boundary/touching case
     else:
-        dt = start
+        dt = latest_start
     return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
 
 
@@ -163,7 +160,11 @@ def _write_matches_db(sb: Client, matches: List[Match]) -> None:
 
 
 # run full pipeline (fetch → bucket → match → write or dry-run)
-def run(dry_run: bool = False, csv_path: str = "matches_dryrun.csv") -> None:
+def run(
+    dry_run: bool = False,
+    csv_path: str = "../matches/matches_dryrun.csv",
+    unmatched_csv_path: str = "../matches/unmatched_reasons_dryrun.csv",
+) -> None:
     rd = RiderData(supabase)
     riders = rd.fetch_riders()
     if not riders:
@@ -174,12 +175,11 @@ def run(dry_run: bool = False, csv_path: str = "matches_dryrun.csv") -> None:
 
     all_matches: List[Match] = []
     all_unmatched: List[RiderLite] = []
-    all_diag: dict[int, dict] = {}  # <- collect reasons keyed by flight_id
-
+    all_diag: dict[int, dict] = {}
 
     # iterate buckets and match
     for name, riders_in_bucket in buckets.items():
-        matches, leftovers, diag = match_bucket(riders_in_bucket, bucket_key=name)  # <- 3 values now
+        matches, leftovers, diag = match_bucket(riders_in_bucket, bucket_key=name)  # 3 values
         all_matches.extend(matches)
         all_unmatched.extend(leftovers)
         all_diag.update(diag)
@@ -187,11 +187,12 @@ def run(dry_run: bool = False, csv_path: str = "matches_dryrun.csv") -> None:
     # report summary
     print(f"Buckets: {len(buckets)} | Groups: {len(all_matches)} | Unmatched: {len(all_unmatched)}")
 
-    # write output
-    if dry_run:
-        _write_matches_csv(all_matches, csv_path)
-        _write_unmatched_with_reasons(all_unmatched, all_diag, "../matches/unmatched_reasons_dryrun.csv")
-    else:
+    # ALWAYS write CSVs
+    _write_matches_csv(all_matches, csv_path)
+    _write_unmatched_with_reasons(all_unmatched, all_diag, unmatched_csv_path)
+
+    # DB writes only if not dry-run
+    if not dry_run:
         _write_matches_db(supabase, all_matches)
 
 
