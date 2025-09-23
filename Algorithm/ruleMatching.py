@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
+import audit
 import config as config
 from rider_data import RiderLite
 
@@ -37,6 +38,23 @@ def _intersection(members: List[RiderLite]) -> Tuple[datetime, datetime, int]:
     return start, end, minutes
 
 
+def _effective_overlap_minutes(members: List[RiderLite]) -> int:
+    # compute overlap across all members with grace
+    starts, ends = [], []
+    for m in members:
+        s, e = _interval(m)
+        starts.append(s); ends.append(e)
+    latest_start = max(starts)
+    earliest_end = min(ends)
+    overlap_min = (earliest_end - latest_start).total_seconds() / 60.0
+    if overlap_min >= 0:
+        return int(overlap_min)  # actual overlap
+    # negative overlap: allow within grace as zero-length effective overlap
+    if config.ALLOW_TOUCHING and (-overlap_min) <= config.OVERLAP_GRACE_MIN:
+        return 0
+    return -1  # signals no feasible overlap even with grace
+
+
 # count bags for a rider (None → 0)
 def _bags_for(r: RiderLite) -> int:
     return int(r.bags_no or 0) + int(r.bags_no_large or 0)
@@ -51,16 +69,21 @@ def _bags_total(members: List[RiderLite]) -> int:
 def _is_valid_group(members: List[RiderLite]) -> bool:
     if not (2 <= len(members) <= 4):
         return False
-    _, _, minutes = _intersection(members)
-    if minutes <= 0:
+
+    eff_min = _effective_overlap_minutes(members)
+    if eff_min < 0:  # truly no overlap even with grace
         return False
+
     if _bags_total(members) > config.NUM_BAGS:
         return False
+
     if config.TERMINAL_MODE == "strict":
         terms = [m.terminal or "" for m in members]
         if len(set(terms)) > 1:
             return False
+
     return True
+
 
 
 # terminal mismatch penalty (used only in relaxed mode)
@@ -77,22 +100,19 @@ def _score_group(members: List[RiderLite], validate: bool = False) -> float:
     if validate and not _is_valid_group(members):
         return float("-inf")
 
-    # time_fit: prefer larger shared window (minutes)
-    _, _, time_fit_min = _intersection(members)
-    if time_fit_min <= 0:
+    eff_min = _effective_overlap_minutes(members)
+    if eff_min < 0:
         return float("-inf")
 
-    # terminal penalty (relaxed mode only)
-    tpen = _terminal_penalty(members)
+    # touching → give a tiny floor so they’re not always siphoned away
+    time_fit_min = eff_min if eff_min > 0 else config.TOUCH_FLOOR_MIN
 
-    # optional: slight bonus for better bag utilization without exceeding capacity
-    # fill in [0,1]; tiny weight to not dominate time overlap
+    tpen = _terminal_penalty(members)
     fill = min(_bags_total(members) / max(1, config.NUM_BAGS), 1.0)
     bag_bonus = 0.5 * fill
 
-    # simple scalar score: time fit dominates, terminal mismatch penalized
-    score = time_fit_min - (tpen * 1000.0) + bag_bonus
-    return score
+    return time_fit_min - (tpen * 1000.0) + bag_bonus
+
 
 
 # build and score all feasible pairs within a bucket
@@ -141,10 +161,51 @@ def _expand_group(seed: List[RiderLite], candidates: List[RiderLite]) -> List[Ri
     return group
 
 
+def _second_pass_leftovers(leftovers: List[RiderLite], bucket_key: Optional[str] = None) -> Tuple[List[Match], List[RiderLite]]:
+    # try to form new groups from leftovers only
+    if len(leftovers) < 2:
+        return [], leftovers
+
+    pairs = _build_scored_pairs(leftovers)
+    if not pairs:
+        return [], leftovers
+
+    idx_pairs = _select_pairs(pairs)
+
+    # map objects to indices once (robust + O(1))
+    idx_map = {id(r): i for i, r in enumerate(leftovers)}
+
+    used: set[int] = set()
+    new_matches: List[Match] = []
+
+    for i, j in idx_pairs:
+        if i in used or j in used:
+            continue
+        base = [leftovers[i], leftovers[j]]
+        group = _expand_group(base, leftovers)
+        for g in group:
+            used.add(idx_map[id(g)])
+        new_matches.append(_group_to_match(group, bucket_key=bucket_key))
+
+    remaining = [r for k, r in enumerate(leftovers) if k not in used]
+    return new_matches, remaining
+
+
 # convert a group to a Match with suggested time at overlap midpoint
 def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) -> Match:
-    start, end, _ = _intersection(group)
-    mid = start + (end - start) / 2
+    starts, ends = [], []
+    for g in group:
+        s, e = _interval(g)
+        starts.append(s); ends.append(e)
+    latest_start = max(starts)
+    earliest_end = min(ends)
+
+    if earliest_end <= latest_start:
+        # touching or no real overlap; place at the boundary start
+        mid = latest_start
+    else:
+        mid = latest_start + (earliest_end - latest_start) / 2
+
     terms = [g.terminal or "" for g in group]
     terminal = terms[0] if len(set(terms)) == 1 else None
     return Match(
@@ -156,16 +217,23 @@ def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) ->
 
 
 # perform matching inside a single bucket
-def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> Tuple[List[Match], List[RiderLite]]:
+def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> Tuple[List[Match], List[RiderLite], dict]:
     if len(riders) < 2:
-        return [], list(riders)
+        # singleton buckets
+        diag = {r.flight_id: {"bucket_key": bucket_key or "", "reason": "singleton_bucket", "details": {}} for r in riders}
+        return [], list(riders), diag
 
-    pairs = _build_scored_pairs(riders)
+    # build pairs + per-rider counters using audit
+    pairs, pair_diag, feasible_count = audit.build_scored_pairs_with_diag(
+        riders,
+        score_group=lambda members: _score_group(members, validate=True),
+    )
     if not pairs:
-        return [], list(riders)
+        diag = {r.flight_id: {"bucket_key": bucket_key or "", "reason": audit._top_reason(pair_diag.get(i, {})), "details": pair_diag.get(i, {})}
+                for i, r in enumerate(riders)}
+        return [], list(riders), diag
 
     idx_pairs = _select_pairs(pairs)
-
     used = set()
     matches: List[Match] = []
 
@@ -179,4 +247,11 @@ def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> T
         matches.append(_group_to_match(group, bucket_key=bucket_key))
 
     leftovers = [r for k, r in enumerate(riders) if k not in used]
-    return matches, leftovers
+
+    # SECOND PASS: try to form groups among leftovers only
+    more_matches, leftovers = _second_pass_leftovers(leftovers, bucket_key=bucket_key)
+    matches.extend(more_matches)
+    
+    # compose diagnostics for leftovers
+    diag = audit.finalize_unmatched_diag(riders, bucket_key, pairs, pair_diag, feasible_count, used)
+    return matches, leftovers, diag
