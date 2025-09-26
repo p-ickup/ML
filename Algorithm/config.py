@@ -2,7 +2,7 @@
 # Single source of truth for knobs/policies
 
 # Group Matching Constraints
-NUM_BAGS = 10
+NUM_BAGS = 13
 
 # Policy Toggles
 TERMINAL_MODE = "slack"  # terminal matching policy - strict enforces exact terminal matches only

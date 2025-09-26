@@ -16,7 +16,7 @@ def _interval(r: RiderLite) -> Tuple[datetime, datetime]:
 
 # bags for rider
 def _bags_for(r: RiderLite) -> int:
-    return int(r.bags_no or 0) + int(r.bags_no_large or 0)
+    return int(r.bags_no or 0) + int(r.bags_no_large or 0) + int(r.bags_no_personal or 0)
 
 # reason for blocking a PAIR (None => feasible)
 def pair_block_reason(a: RiderLite, b: RiderLite) -> Optional[str]:

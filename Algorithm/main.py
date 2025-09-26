@@ -20,7 +20,7 @@ load_dotenv()
 # Load environment variables for Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 print(SUPABASE_URL)
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_SECRET_KEY")
 
 # Initialize Supabase client and location cache
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -74,6 +74,7 @@ def _write_matches_csv(matches: List[Match], csv_path: str) -> None:
                 "bags_total": _bags_total(r),
                 "bags_no": r.bags_no or 0,
                 "bags_no_large": r.bags_no_large or 0,
+                "bags_no_personal": r.bags_no_personal or 0,
                 "voucher_given": False,             # default for CSV parity
             })
     if not rows:
@@ -100,6 +101,7 @@ def _write_unmatched_with_reasons(unmatched: List[RiderLite], reasons: dict, csv
             "latest_time": r.latest_time,
             "bags_no": r.bags_no or 0,
             "bags_no_large": r.bags_no_large or 0,
+            "bags_no_personal": r.bags_no_personal or 0,
             "terminal": r.terminal or "",
             "bucket_key": info.get("bucket_key", ""),
             "reason": info.get("reason", "unknown"),
@@ -143,9 +145,10 @@ def _write_matches_db(sb: Client, matches: List[Match]) -> None:
                 "flight_id": r.flight_id,
                 "date": ride_date,                 # earliest overlap date
                 "time": match_time,                # earliest overlap time (time w/o tz)
-                "status": "suggested",            
-                "source": "ml",                  
                 "voucher_given": False,            # default
+                "is_verified": False,                  # verified match correctness        
+                "source": "ml",
+                "is_subsidized": False          
             })
             flight_ids.append(r.flight_id)
 

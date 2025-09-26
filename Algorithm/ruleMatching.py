@@ -57,7 +57,7 @@ def _effective_overlap_minutes(members: List[RiderLite]) -> int:
 
 # count bags for a rider (None → 0)
 def _bags_for(r: RiderLite) -> int:
-    return int(r.bags_no or 0) + int(r.bags_no_large or 0)
+    return int(r.bags_no or 0) + int(r.bags_no_large or 0) + int(r.bags_no_personal or 0)
 
 
 # total bags in a group

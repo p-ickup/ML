@@ -55,6 +55,7 @@ class RiderLite:
     school: str
     bags_no: Optional[int]
     bags_no_large: Optional[int]
+    bags_no_personal: Optional[int]
 
 class RiderData:
     # minimal fetch layer for flights + users → RiderLite objects
@@ -119,6 +120,7 @@ class RiderData:
                     school=school,
                     bags_no=(int(f["bag_no"]) if f.get("bag_no") is not None else None),
                     bags_no_large=(int(f["bag_no_large"]) if f.get("bag_no_large") is not None else None),
+                    bags_no_personal=(int(f["bag_no"]) if f.get("bag_no") is not None else None)
                 )
             )
 
