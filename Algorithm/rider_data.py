@@ -1,7 +1,7 @@
 # this class is in charge of getting the neccessary data from our supabase database
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 from supabase import Client
@@ -55,6 +55,7 @@ class RiderLite:
     school: str
     bags_no: Optional[int]
     bags_no_large: Optional[int]
+    bag_no_personal: Optional[int]
 
 class RiderData:
     # minimal fetch layer for flights + users → RiderLite objects
@@ -63,22 +64,28 @@ class RiderData:
         self.sb = sb
         self.riders: List[RiderLite] = []
 
-    # fetch future flights that are unmatched
-    def fetch_flights(self) -> List[dict]:
-        today_iso = datetime.today().date().isoformat()
-        resp = (
+    #fetch future flights within a max horizon (default 10 days)
+    def fetch_flights(self, max_days_ahead: Optional[int] = 10) -> List[dict]:
+        today = datetime.today().date()
+        q = (
             self.sb.table("Flights")
             .select(
                 "flight_id,user_id,flight_no,earliest_time,latest_time,"
-                "airport,date,to_airport,terminal,matched,bag_no,bag_no_large"
+                "airport,date,to_airport,terminal,matched,bag_no,bag_no_large,bag_no_personal"
             )
-            .gt("date", today_iso)
+            .gt("date", today.isoformat())
             .eq("matched", False)
             .order("date", desc=False)
             .order("earliest_time", desc=False)
-            .execute()
         )
+
+        if max_days_ahead is not None:
+            end_date = (today + timedelta(days=max_days_ahead)).isoformat()
+            q = q.lte("date", end_date)
+
+        resp = q.execute()
         return resp.data or []
+
 
     # fetch school info for given user_ids
     def fetch_users(self, user_ids: List[str]) -> Dict[str, str]:
@@ -93,11 +100,11 @@ class RiderData:
         return {row["user_id"]: row["school"] for row in (resp.data or []) if row.get("school")}
 
     # build RiderLite objects from flights + schools (normalized airport + terminal)
-    def fetch_riders(self) -> List[RiderLite]:
-        flights = self.fetch_flights()
+    def fetch_riders(self, max_days_ahead: Optional[int] = 10) -> List[RiderLite]:
+        flights = self.fetch_flights(max_days_ahead=max_days_ahead)
         uid_list = [f["user_id"] for f in flights if f.get("user_id")]
         school_by_uid = self.fetch_users(uid_list)
-
+        
         riders: List[RiderLite] = []
         for f in flights:
             school = school_by_uid.get(f["user_id"])
@@ -119,6 +126,7 @@ class RiderData:
                     school=school,
                     bags_no=(int(f["bag_no"]) if f.get("bag_no") is not None else None),
                     bags_no_large=(int(f["bag_no_large"]) if f.get("bag_no_large") is not None else None),
+                    bag_no_personal=(int(f["bag_no_personal"]) if f.get("bag_no_personal") is not None else None)
                 )
             )
 

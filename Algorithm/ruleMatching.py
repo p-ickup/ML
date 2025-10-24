@@ -57,7 +57,7 @@ def _effective_overlap_minutes(members: List[RiderLite]) -> int:
 
 # count bags for a rider (None → 0)
 def _bags_for(r: RiderLite) -> int:
-    return int(r.bags_no or 0) + int(r.bags_no_large or 0)
+    return int(r.bags_no or 0) + int(r.bags_no_large or 0) + int(r.bag_no_personal or 0)
 
 
 # total bags in a group
@@ -84,6 +84,148 @@ def _is_valid_group(members: List[RiderLite]) -> bool:
 
     return True
 
+
+def _best_absorb_slot(matches: List[Match], rider: RiderLite) -> Optional[Tuple[int, List[RiderLite], float]]:
+    """
+    For a single leftover rider, find the best existing group to absorb into.
+    Returns (match_index, new_group_members, score_delta) or None if no valid insertion.
+    """
+    best: Optional[Tuple[int, List[RiderLite], float]] = None
+
+    # Prefer filling 3->4 first, then 2->3, then 1->2 (rare), tie-break by best score gain
+    size_order = [3, 2, 1]
+    for target_size in size_order:
+        for mi, M in enumerate(matches):
+            group = M.riders
+            if len(group) != target_size:
+                continue
+
+            trial = group + [rider]
+            if not _is_valid_group(trial):
+                continue
+
+            # score delta = score(trial) - score(group)
+            old_score = _score_group(group, validate=True)
+            new_score = _score_group(trial, validate=True)
+            delta = new_score - old_score
+
+            if best is None or delta > best[2]:
+                best = (mi, trial, delta)
+
+        if best is not None:
+            # we found a slot with the preferred size; no need to check smaller sizes
+            break
+
+    return best
+
+
+def _third_pass_absorb_leftovers(
+    matches: List[Match],
+    leftovers: List[RiderLite],
+    bucket_key: Optional[str] = None
+) -> Tuple[List[Match], List[RiderLite]]:
+    """
+    Greedy absorption pass:
+    - For each leftover L, try to insert into an existing group with len<4.
+    - Prefer 3->4, then 2->3, picking the insertion with the highest score gain.
+    - Recompute Match (suggested_time_iso/terminal) when a group changes.
+    """
+    if not leftovers or not matches:
+        return matches, leftovers
+
+    ms = list(matches)
+    lo = list(leftovers)
+
+    changed = True
+    while changed:
+        changed = False
+        i = 0
+        while i < len(lo):
+            L = lo[i]
+            best = _best_absorb_slot(ms, L)
+            if best is None:
+                i += 1
+                continue
+
+            mi, new_members, _ = best
+            # rewrite the match with updated riders
+            ms[mi] = _group_to_match(new_members, bucket_key=bucket_key)
+            # remove L from leftovers
+            lo.pop(i)
+            changed = True
+            # do NOT increment i, since we just removed current index
+        # loop ends when no leftover can be absorbed in this sweep
+
+    return ms, lo
+
+
+def _split_full_group_for_leftovers(
+    matches: List[Match],
+    leftovers: List[RiderLite],
+    bucket_key: Optional[str] = None
+) -> Tuple[List[Match], List[RiderLite]]:
+    """
+    Try to split any 4-person group into a 3-person group + a 2-person group by pairing
+    one member of the 4 with a leftover. We keep doing this greedily until no change.
+    """
+    if not leftovers:
+        return matches, leftovers
+
+    changed = True
+    # Work on copies we can mutate
+    ms = list(matches)
+    lo = list(leftovers)
+
+    while changed:
+        changed = False
+
+        # find first leftover that we can rescue
+        li = None
+        for idx_l, L in enumerate(lo):
+            rescued = False
+
+            # check every existing 4-person group
+            for mi, M in enumerate(ms):
+                if len(M.riders) != 4:
+                    continue
+
+                group4 = M.riders
+
+                # try removing exactly one member X
+                for x_idx in range(4):
+                    X = group4[x_idx]
+                    group3 = group4[:x_idx] + group4[x_idx+1:]
+
+                    # both the remaining 3 and the pair (X, L) must be valid
+                    if not _is_valid_group(group3):
+                        continue
+                    if not _is_valid_group([X, L]):
+                        continue
+
+                    # success: build new Match objects
+                    match3 = _group_to_match(group3, bucket_key=bucket_key)
+                    match2 = _group_to_match([X, L], bucket_key=bucket_key)
+
+                    # replace the old 4-group with the 3-group and append the 2-group
+                    ms[mi] = match3
+                    ms.append(match2)
+
+                    # remove the rescued leftover from leftovers
+                    lo.pop(idx_l)
+
+                    changed = True
+                    rescued = True
+                    break  # stop trying other X in this group
+
+                if rescued:
+                    break  # stop scanning more groups for this leftover
+
+            if rescued:
+                # we changed ms/lo; restart outer search
+                break
+        # loop continues if changed == True
+
+    return ms, lo
 
 
 # terminal mismatch penalty (used only in relaxed mode)
@@ -223,6 +365,9 @@ def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> T
         diag = {r.flight_id: {"bucket_key": bucket_key or "", "reason": "singleton_bucket", "details": {}} for r in riders}
         return [], list(riders), diag
 
+    # NEW: stable identity → index map for this bucket
+    idx_map = {id(r): i for i, r in enumerate(riders)}
+
     # build pairs + per-rider counters using audit
     pairs, pair_diag, feasible_count = audit.build_scored_pairs_with_diag(
         riders,
@@ -236,14 +381,13 @@ def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> T
     idx_pairs = _select_pairs(pairs)
     used = set()
     matches: List[Match] = []
-
     for i, j in idx_pairs:
         if i in used or j in used:
             continue
         base = [riders[i], riders[j]]
         group = _expand_group(base, riders)
         for g in group:
-            used.add(riders.index(g))
+            used.add(idx_map[id(g)])
         matches.append(_group_to_match(group, bucket_key=bucket_key))
 
     leftovers = [r for k, r in enumerate(riders) if k not in used]
@@ -252,6 +396,14 @@ def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> T
     more_matches, leftovers = _second_pass_leftovers(leftovers, bucket_key=bucket_key)
     matches.extend(more_matches)
     
+    # OPTIONAL THIRD STEP: split a 4 into (3,2) if it rescues a leftover
+    if getattr(config, "SPLIT_4_TO_3_2", False):
+        matches, leftovers = _split_full_group_for_leftovers(matches, leftovers, bucket_key=bucket_key)
+        
+    # OPTIONAL THIRD STEP B: absorb leftovers into existing groups (prefer 3->4, then 2->3)
+    if getattr(config, "ABSORB_LEFTOVERS", True):  # default on
+        matches, leftovers = _third_pass_absorb_leftovers(matches, leftovers, bucket_key=bucket_key)
+        
     # compose diagnostics for leftovers
     diag = audit.finalize_unmatched_diag(riders, bucket_key, pairs, pair_diag, feasible_count, used)
     return matches, leftovers, diag

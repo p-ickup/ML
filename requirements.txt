@@ -1,8 +1,6 @@
 flask
 flask_cors
 requests
-pandas
-numpy
 sklearn
 supabase
 joblib

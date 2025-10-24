@@ -5,6 +5,7 @@ Streamlined version that directly handles ride creation and matching
 
 import argparse
 import csv
+import json
 import os
 from datetime import datetime, timedelta
 from typing import List, Tuple
@@ -13,6 +14,7 @@ from buckets import bucket_names, make_buckets
 from dotenv import load_dotenv
 from rider_data import RiderData, RiderLite
 from ruleMatching import Match, match_bucket
+from subsidization import run_aspc_subsidy
 from supabase import Client, create_client
 
 load_dotenv() 
@@ -20,7 +22,7 @@ load_dotenv()
 # Load environment variables for Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 print(SUPABASE_URL)
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_KEY = os.getenv("SUPABASE_SECRET_KEY")
 
 # Initialize Supabase client and location cache
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -54,38 +56,86 @@ def _split_iso(dt_iso: str) -> Tuple[str, str]:
 
 # write matches to csv (one row per rider, grouped by a simulated ride_id; uses earliest-overlap date/time)
 def _write_matches_csv(matches: List[Match], csv_path: str) -> None:
-    rows = []
-    for idx, m in enumerate(matches, start=1):
-        sim_ride_id = idx  # simulated for readability; DB ride_id will be different in write mode
-        match_date, match_time = _match_datetime_from_earliest(m)
-        for r in m.riders:
-            rows.append({
-                "ride_id_simulated": sim_ride_id,
-                "bucket_key": m.bucket_key or "",
-                "date": match_date,                 # earliest overlap date
-                "time": match_time,                 # earliest overlap time
-                "suggested_time_iso": m.suggested_time_iso,
-                "terminal": m.terminal or "",
-                "user_id": r.user_id,
-                "flight_id": r.flight_id,
-                "flight_no": r.flight_no if r.flight_no is not None else "",
-                "airport": r.airport,
-                "to_airport": r.to_airport,
-                "bags_total": _bags_total(r),
-                "bags_no": r.bags_no or 0,
-                "bags_no_large": r.bags_no_large or 0,
-                "voucher_given": False,             # default for CSV parity
-            })
-    if not rows:
+    """
+    Write matches to a CSV (one row per matched ride group).
+    Includes earliest_time, latest_time, and suggested_time for easy inspection.
+    """
+    if not matches:
         print("No matches to write.")
         return
+
+    rows = []
+    for idx, m in enumerate(matches, start=1):
+        sim_ride_id = idx
+
+        # compute window across all riders
+        starts, ends = [], []
+        for r in m.riders:
+            s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
+            e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
+            starts.append(s)
+            ends.append(e)
+
+        latest_start = max(starts)
+        earliest_end = min(ends)
+
+        match_date = latest_start.date().isoformat()
+        earliest_time = latest_start.time().replace(microsecond=0).isoformat()
+        latest_time = earliest_end.time().replace(microsecond=0).isoformat()
+
+        suggested_time_iso = m.suggested_time_iso or ""
+        try:
+            suggested_time = (
+                datetime.fromisoformat(suggested_time_iso).time().replace(microsecond=0).isoformat()
+                if suggested_time_iso else ""
+            )
+        except Exception:
+            suggested_time = ""
+
+        # rider details
+        rider_user_ids = [r.user_id for r in m.riders]
+        total_bags = sum(
+            int(r.bags_no or 0) +
+            int(r.bags_no_large or 0) +
+            int(getattr(r, "bag_no_personal", 0) or 0)
+            for r in m.riders
+        )
+
+        # NEW: per-rider time ranges for quick verification
+        # sorted by earliest_time to read top-to-bottom
+        riders_sorted = sorted(m.riders, key=lambda rr: rr.earliest_time)
+        match_times = "[" + ", ".join(
+            f"{r.earliest_time}-{r.latest_time}" for r in riders_sorted
+        ) + "]"
+        # default vouchers
+        voucher = ""
+        contingency_list: List[str] = [""] * len(m.riders)
+
+        rows.append({
+            "ride_id_simulated": sim_ride_id,
+            "bucket_key": m.bucket_key or "",
+            "date": match_date,
+            "earliest_time": earliest_time,
+            "latest_time": latest_time,
+            "suggested_time": suggested_time,
+            "suggested_time_iso": suggested_time_iso,
+            "terminal": m.terminal or "",
+            "match_times": match_times,                # <— NEW COLUMN
+            "bags_total": total_bags,
+            "num_riders": len(m.riders),
+            "riders": json.dumps(rider_user_ids),
+            "voucher": voucher,
+            "contingency_vouchers": json.dumps(contingency_list),
+        })
+
     fieldnames = list(rows[0].keys())
     with open(csv_path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
-        w.writeheader()
-        w.writerows(rows)
-    print(f"Wrote dry-run CSV with {len(matches)} groups → {csv_path}")
-    
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    print(f"Wrote dry-run CSV with {len(rows)} group rows → {csv_path}")
+
 def _write_unmatched_with_reasons(unmatched: List[RiderLite], reasons: dict, csv_path: str) -> None:
     rows = []
     for r in unmatched:
@@ -143,9 +193,11 @@ def _write_matches_db(sb: Client, matches: List[Match]) -> None:
                 "flight_id": r.flight_id,
                 "date": ride_date,                 # earliest overlap date
                 "time": match_time,                # earliest overlap time (time w/o tz)
-                "status": "suggested",            
                 "source": "ml",                  
-                "voucher_given": False,            # default
+                "voucher": "",            # default
+                "contingency_voucher": None,
+                "is_verified": False,
+                # "is_subsidized": True
             })
             flight_ids.append(r.flight_id)
 
@@ -164,9 +216,12 @@ def run(
     dry_run: bool = False,
     csv_path: str = "../matches/matches_dryrun.csv",
     unmatched_csv_path: str = "../matches/unmatched_reasons_dryrun.csv",
+    subsidy_check: bool = False,
+    days_ahead: int = 10
 ) -> None:
     rd = RiderData(supabase)
-    riders = rd.fetch_riders()
+    riders = rd.fetch_riders(max_days_ahead=days_ahead)
+
     if not riders:
         print("No candidate riders found.")
         return
@@ -187,13 +242,18 @@ def run(
     # report summary
     print(f"Buckets: {len(buckets)} | Groups: {len(all_matches)} | Unmatched: {len(all_unmatched)}")
 
-    # ALWAYS write CSVs
     _write_matches_csv(all_matches, csv_path)
     _write_unmatched_with_reasons(all_unmatched, all_diag, unmatched_csv_path)
 
     # DB writes only if not dry-run
     if not dry_run:
-        _write_matches_db(supabase, all_matches)
+        ride_ids = _write_matches_db(supabase, all_matches)
+    else:
+        ride_ids = []
+
+    if subsidy_check:
+        print("Running ASPC subsidization eligibility check...")
+        run_aspc_subsidy(supabase, riders)
 
 
 # cli entry
@@ -201,6 +261,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pickup matcher")
     parser.add_argument("--dry-run", action="store_true", help="do not write to DB; export CSV instead")
     parser.add_argument("--csv", type=str, default="../matches/matches_dryrun.csv", help="CSV path for --dry-run output")
+    parser.add_argument("--subsidy-check", action="store_true", help="run ASPC subsidization check after matching")
+    parser.add_argument("--days-ahead", type=int, default=10, help="only consider flights within N days ahead")
     args = parser.parse_args()
 
-    run(dry_run=args.dry_run, csv_path=args.csv)
+    run(
+        dry_run=args.dry_run,
+        csv_path=args.csv,
+        subsidy_check=args.subsidy_check,
+        days_ahead=args.days_ahead,
+    )
+
+
+
