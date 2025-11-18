@@ -56,6 +56,7 @@ class RiderLite:
     bags_no: Optional[int]
     bags_no_large: Optional[int]
     bag_no_personal: Optional[int]
+    subsidized: bool = False
 
 class RiderData:
     # minimal fetch layer for flights + users → RiderLite objects
@@ -74,7 +75,7 @@ class RiderData:
                 "airport,date,to_airport,terminal,matched,bag_no,bag_no_large,bag_no_personal"
             )
             .gt("date", today.isoformat())
-            .eq("matched", False)
+            .is_("matched", None)
             .order("date", desc=False)
             .order("earliest_time", desc=False)
         )
@@ -84,6 +85,13 @@ class RiderData:
             q = q.lte("date", end_date)
 
         resp = q.execute()
+        
+        print("\n=== DEBUG: RAW FLIGHT ROWS ===")
+        for row in resp.data or []:
+            print(row)
+
+        print("=== END DEBUG ===\n")
+
         return resp.data or []
 
 
@@ -104,13 +112,16 @@ class RiderData:
         flights = self.fetch_flights(max_days_ahead=max_days_ahead)
         uid_list = [f["user_id"] for f in flights if f.get("user_id")]
         school_by_uid = self.fetch_users(uid_list)
-        
         riders: List[RiderLite] = []
+
+        print("\n=== DEBUG: CONSTRUCTED FLIGHT -> RIDERLITE MAPPING ===")
         for f in flights:
+            print("FLIGHT:", f)
+            print("=== END DEBUG ===\n")
             school = school_by_uid.get(f["user_id"])
             if not school:
                 continue
-
+            
             riders.append(
                 RiderLite(
                     user_id=f["user_id"],
@@ -118,17 +129,18 @@ class RiderData:
                     flight_no=(int(f["flight_no"]) if f.get("flight_no") is not None else None),
                     earliest_time=str(f.get("earliest_time")),
                     latest_time=str(f.get("latest_time")),
-                    airport=normalize_airport(f.get("airport")),    
+                    airport=normalize_airport(f.get("airport")),
                     to_airport=bool(f.get("to_airport")),
                     date=str(f.get("date")),
-                    terminal=normalize_terminal(f.get("terminal")), 
+                    terminal=normalize_terminal(f.get("terminal")),
                     matched=bool(f.get("matched", False)),
                     school=school,
                     bags_no=(int(f["bag_no"]) if f.get("bag_no") is not None else None),
                     bags_no_large=(int(f["bag_no_large"]) if f.get("bag_no_large") is not None else None),
-                    bag_no_personal=(int(f["bag_no_personal"]) if f.get("bag_no_personal") is not None else None)
+                    bag_no_personal=(int(f["bag_no_personal"]) if f.get("bag_no_personal") is not None else None),
+                    subsidized=False, 
                 )
             )
 
         self.riders = riders
-        return riders
+        return self.riders

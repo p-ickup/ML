@@ -1,6 +1,6 @@
 # matching.py
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 import audit
@@ -15,13 +15,20 @@ class Match:
     suggested_time_iso: str
     terminal: Optional[str]
     bucket_key: Optional[str] = None
+    group_voucher: Optional[str] = None   # ← NEW FIELD
 
 
 # parse a rider's window into datetimes
 def _interval(r: RiderLite) -> Tuple[datetime, datetime]:
     start = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-    end = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
+    end   = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
+
+    # Handle overnight (cross-midnight) windows
+    if end < start:
+        end += timedelta(days=1)
+
     return start, end
+
 
 
 # compute intersection [start,end) and its minutes for any group
@@ -56,13 +63,24 @@ def _effective_overlap_minutes(members: List[RiderLite]) -> int:
 
 
 # count bags for a rider (None → 0)
-def _bags_for(r: RiderLite) -> int:
-    return int(r.bags_no or 0) + int(r.bags_no_large or 0) + int(r.bag_no_personal or 0)
+def _bags_for(r: RiderLite) -> Tuple[int, int, int]:
+    large = int(r.bags_no_large or 0)
+    normal = int(r.bags_no or 0)
+    personal = int(r.bag_no_personal or 0)
+    return large, normal, personal
 
 
-# total bags in a group
-def _bags_total(members: List[RiderLite]) -> int:
-    return sum(_bags_for(m) for m in members)
+def _bags_totals(members: List[RiderLite]) -> Tuple[int, int, int, int]:
+    total_large = 0
+    total_normal = 0
+    total_personal = 0
+    for m in members:
+        L, N, P = _bags_for(m)
+        total_large += L
+        total_normal += N
+        total_personal += P
+    total_all = total_large + total_normal + total_personal
+    return total_large, total_normal, total_personal, total_all
 
 
 # quick validity check (size, time overlap, bag capacity, terminal strict)
@@ -74,7 +92,15 @@ def _is_valid_group(members: List[RiderLite]) -> bool:
     if eff_min < 0:  # truly no overlap even with grace
         return False
 
-    if _bags_total(members) > config.NUM_BAGS:
+    # BAG CAPACITY RULES (configurable)
+    total_large, total_normal, total_personal, total_all = _bags_totals(members)
+
+    # Check large bag limit
+    if total_large > config.MAX_LARGE_BAGS:
+        return False
+
+    # Check total bag limit
+    if total_all > config.MAX_TOTAL_BAGS:
         return False
 
     if config.TERMINAL_MODE == "strict":
@@ -250,7 +276,10 @@ def _score_group(members: List[RiderLite], validate: bool = False) -> float:
     time_fit_min = eff_min if eff_min > 0 else config.TOUCH_FLOOR_MIN
 
     tpen = _terminal_penalty(members)
-    fill = min(_bags_total(members) / max(1, config.NUM_BAGS), 1.0)
+    _, _, _, total_all = _bags_totals(members)
+
+    # reward groups that use bag capacity well (scaled to MAX_TOTAL_BAGS)
+    fill = min(total_all / config.MAX_TOTAL_BAGS, 1.0)
     bag_bonus = 0.5 * fill
 
     return time_fit_min - (tpen * 1000.0) + bag_bonus
@@ -335,24 +364,56 @@ def _second_pass_leftovers(leftovers: List[RiderLite], bucket_key: Optional[str]
 
 # convert a group to a Match with suggested time at overlap midpoint
 def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) -> Match:
+    # Compute overlap window
     starts, ends = [], []
     for g in group:
         s, e = _interval(g)
-        starts.append(s); ends.append(e)
+        starts.append(s)
+        ends.append(e)
+
     latest_start = max(starts)
     earliest_end = min(ends)
 
-    if earliest_end <= latest_start:
-        # touching or no real overlap; place at the boundary start
-        mid = latest_start
-    else:
-        mid = latest_start + (earliest_end - latest_start) / 2
+    # All riders in a group ALWAYS share same direction (bucket guarantee)
+    to_airport = group[0].to_airport
 
+    # Base suggested time BEFORE offset
+    if earliest_end <= latest_start:
+        # touching window fallback
+        chosen = latest_start
+    else:
+        if to_airport:
+            # going TO airport → choose END of overlap
+            chosen = earliest_end
+        else:
+            # coming FROM airport → choose START of overlap
+            chosen = latest_start
+
+    # Apply configurable offsets:
+    # Negative → earlier, Positive → later
+    if to_airport:
+        offset_min = getattr(config, "TO_AIRPORT_OFFSET_MIN", 0)
+    else:
+        offset_min = getattr(config, "FROM_AIRPORT_OFFSET_MIN", 0)
+
+    chosen_offset = chosen + timedelta(minutes=offset_min)
+
+    # Clamp chosen time to within the overlap
+    if chosen_offset < latest_start:
+        chosen_offset = latest_start
+    if chosen_offset > earliest_end:
+        chosen_offset = earliest_end
+
+    # Normalize seconds
+    chosen_offset = chosen_offset.replace(second=0, microsecond=0)
+
+    # Terminal handling (strict mode)
     terms = [g.terminal or "" for g in group]
     terminal = terms[0] if len(set(terms)) == 1 else None
+
     return Match(
         riders=group,
-        suggested_time_iso=mid.replace(second=0, microsecond=0).isoformat(),
+        suggested_time_iso=chosen_offset.isoformat(),
         terminal=terminal,
         bucket_key=bucket_key,
     )
@@ -404,6 +465,17 @@ def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> T
     if getattr(config, "ABSORB_LEFTOVERS", True):  # default on
         matches, leftovers = _third_pass_absorb_leftovers(matches, leftovers, bucket_key=bucket_key)
         
+    # Third PASS: try to form groups among leftovers only
+    more_matches, leftovers = _second_pass_leftovers(leftovers, bucket_key=bucket_key)
+    matches.extend(more_matches)
+
+    if getattr(config, "ABSORB_LEFTOVERS", True):  # default on
+        matches, leftovers = _third_pass_absorb_leftovers(matches, leftovers, bucket_key=bucket_key)
+
+    # FINAL leftover matching pass (cleanup)
+    final_new, leftovers = _second_pass_leftovers(leftovers, bucket_key=bucket_key)
+    matches.extend(final_new)
+
     # compose diagnostics for leftovers
     diag = audit.finalize_unmatched_diag(riders, bucket_key, pairs, pair_diag, feasible_count, used)
     return matches, leftovers, diag

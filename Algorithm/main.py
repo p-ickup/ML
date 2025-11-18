@@ -8,14 +8,15 @@ import csv
 import json
 import os
 from datetime import datetime, timedelta
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from buckets import bucket_names, make_buckets
 from dotenv import load_dotenv
 from rider_data import RiderData, RiderLite
 from ruleMatching import Match, match_bucket
-from subsidization import run_aspc_subsidy
 from supabase import Client, create_client
+
+from vouchers import assign_vouchers
 
 load_dotenv() 
 
@@ -47,12 +48,10 @@ def _match_datetime_from_earliest(m: Match) -> Tuple[str, str]:
         dt = latest_start
     return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
 
-
 # split ISO to (date, time) if needed elsewhere
 def _split_iso(dt_iso: str) -> Tuple[str, str]:
     dt = datetime.fromisoformat(dt_iso)
     return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
-
 
 # write matches to csv (one row per rider, grouped by a simulated ride_id; uses earliest-overlap date/time)
 def _write_matches_csv(matches: List[Match], csv_path: str) -> None:
@@ -101,7 +100,7 @@ def _write_matches_csv(matches: List[Match], csv_path: str) -> None:
             for r in m.riders
         )
 
-        # NEW: per-rider time ranges for quick verification
+        # per-rider time ranges for quick verification
         # sorted by earliest_time to read top-to-bottom
         riders_sorted = sorted(m.riders, key=lambda rr: rr.earliest_time)
         match_times = "[" + ", ".join(
@@ -124,8 +123,9 @@ def _write_matches_csv(matches: List[Match], csv_path: str) -> None:
             "bags_total": total_bags,
             "num_riders": len(m.riders),
             "riders": json.dumps(rider_user_ids),
-            "voucher": voucher,
-            "contingency_vouchers": json.dumps(contingency_list),
+            "voucher": m.group_voucher,
+            "contingency_vouchers": json.dumps([getattr(r, "contingency_voucher", "") for r in m.riders]),
+            "subsidized": any(r.subsidized for r in m.riders)
         })
 
     fieldnames = list(rows[0].keys())
@@ -194,10 +194,10 @@ def _write_matches_db(sb: Client, matches: List[Match]) -> None:
                 "date": ride_date,                 # earliest overlap date
                 "time": match_time,                # earliest overlap time (time w/o tz)
                 "source": "ml",                  
-                "voucher": "",            # default
-                "contingency_voucher": None,
+                "voucher": getattr(r, "group_voucher", ""),
+                "contingency_voucher": getattr(r, "contingency_voucher", None),
                 "is_verified": False,
-                # "is_subsidized": True
+                "subsidized": r.subsidized,        # ← NEW LINE
             })
             flight_ids.append(r.flight_id)
 
@@ -211,18 +211,67 @@ def _write_matches_db(sb: Client, matches: List[Match]) -> None:
     print(f"Wrote {len(matches)} groups to Supabase and updated Flights.matched.")
 
 
+def apply_group_subsidy(matches: list[Match], thresholds: Dict[str, int]) -> None:
+    """
+    A group is subsidized only if:
+      • the group's size >= airport threshold (e.g., LAX:3, ONT:2)
+      • AND all riders are Pomona students.
+    """
+    for m in matches:
+        if not m.riders:
+            continue
+
+        # Check airport majority (should already be consistent)
+        counts: Dict[str, int] = {}
+        for r in m.riders:
+            a = (r.airport or "").upper()
+            counts[a] = counts.get(a, 0) + 1
+
+        group_airport = max(counts.items(), key=lambda kv: kv[1])[0]
+
+        # Get required group size threshold for this airport
+        need = thresholds.get(group_airport)
+        if need is None:
+            continue
+
+        # Check size requirement
+        if len(m.riders) < need:
+            continue
+
+        # NEW RULE: all riders must be Pomona students
+        all_pomona = all(
+            (r.school or "").strip().upper() == "POMONA"
+            for r in m.riders
+        )
+
+        if not all_pomona:
+            continue
+
+        # If both conditions satisfied → subsidize entire group
+        for r in m.riders:
+            r.subsidized = True
+
+
 # run full pipeline (fetch → bucket → match → write or dry-run)
 def run(
     dry_run: bool = False,
     csv_path: str = "../matches/matches_dryrun.csv",
     unmatched_csv_path: str = "../matches/unmatched_reasons_dryrun.csv",
-    subsidy_check: bool = False,
-    days_ahead: int = 10
+    days_ahead: int = 10,
+    vouchers_csv_path: str = "../vouchers/Thanksgiving.csv"
 ) -> None:
     rd = RiderData(supabase)
     riders = rd.fetch_riders(max_days_ahead=days_ahead)
 
-    if not riders:
+    # Print how many rider forms were loaded + the date range
+    if riders:
+        dates = sorted({r.date for r in riders})
+        print(
+            f"Fetched {len(riders)} rider forms "
+            f"(dates: {dates[0]} → {dates[-1]})"
+        )
+    else:
+        print("Fetched 0 rider forms.")
         print("No candidate riders found.")
         return
 
@@ -238,6 +287,14 @@ def run(
         all_matches.extend(matches)
         all_unmatched.extend(leftovers)
         all_diag.update(diag)
+        
+    # group subsidiy
+    apply_group_subsidy(
+        all_matches,
+        thresholds={"LAX": 3, "ONT": 2}
+    )
+
+    assign_vouchers(all_matches, voucher_csv_path=vouchers_csv_path, dry_run=dry_run)
 
     # report summary
     print(f"Buckets: {len(buckets)} | Groups: {len(all_matches)} | Unmatched: {len(all_unmatched)}")
@@ -251,25 +308,21 @@ def run(
     else:
         ride_ids = []
 
-    if subsidy_check:
-        print("Running ASPC subsidization eligibility check...")
-        run_aspc_subsidy(supabase, riders)
-
 
 # cli entry
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pickup matcher")
     parser.add_argument("--dry-run", action="store_true", help="do not write to DB; export CSV instead")
     parser.add_argument("--csv", type=str, default="../matches/matches_dryrun.csv", help="CSV path for --dry-run output")
-    parser.add_argument("--subsidy-check", action="store_true", help="run ASPC subsidization check after matching")
     parser.add_argument("--days-ahead", type=int, default=10, help="only consider flights within N days ahead")
+    parser.add_argument("--vouchers", type=str, default="../vouchers/Thanksgiving.csv",help="Path to vouchers CSV")
     args = parser.parse_args()
 
     run(
         dry_run=args.dry_run,
         csv_path=args.csv,
-        subsidy_check=args.subsidy_check,
         days_ahead=args.days_ahead,
+        vouchers_csv_path=args.vouchers,
     )
 
 

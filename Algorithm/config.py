@@ -2,7 +2,8 @@
 # Single source of truth for knobs/policies
 
 # Group Matching Constraints
-NUM_BAGS = 10
+MAX_TOTAL_BAGS = 10
+MAX_LARGE_BAGS = 4
 
 # Policy Toggles
 TERMINAL_MODE = "slack"  # terminal matching policy - strict enforces exact terminal matches only
@@ -25,3 +26,20 @@ LOCAL_IMPROVE_TOL = 0.0   # require >= this improvement in group score to add a 
 SPLIT_4_TO_3_2 = True  # set False to disable
 
 ABSORB_LEFTOVERS = True
+
+# Offset minutes applied when picking suggested match time
+TO_AIRPORT_OFFSET_MIN = -10       # leave 10 min earlier (move backward)
+FROM_AIRPORT_OFFSET_MIN = 10      # leave 10 min later (move forward)
+
+COMPATIBLE_SCHOOLS = {
+    "POMONA": ["POMONA"],   # Pomona matches only with Pomona (exclusive)
+}
+
+"""
+Matching Strategies:
+1. leftover_match — form new groups from leftovers (pairs → expand to 4).
+2. absorb — insert leftovers into existing groups (fill 3→4, then 2→3).
+3. split — split 4-person groups into (3 + 2) to rescue a leftover.
+
+Default: MATCHING_STRATEGIES = ["leftover_match", "split", "absorb"]
+"""
