@@ -31,18 +31,17 @@ def load_voucher_pool(csv_path: str) -> pd.DataFrame:
 
 
 def _find_group_voucher(df, airport, ride_date):
-    # find an unused, outbound, non-contingency voucher valid for the date + airport
     candidates = df[
         (df["USED"] == False) &
         (df["AIRPORT"] == airport) &
         (df["Contingency"] == False) &
-        (df["TO_AIRPORT"] == True) &
         (df["start_date"] <= ride_date) &
         (df["end_date"] >= ride_date)
     ]
     if candidates.empty:
         return None
     return candidates.index[0]
+
 
 
 def _find_contingency_voucher(df, airport):
@@ -74,7 +73,7 @@ def assign_vouchers(matches: List[Match], voucher_csv_path: str, dry_run: bool =
         ride_date = datetime.fromisoformat(match.suggested_time_iso).date()
 
         # --- GROUP VOUCHER ASSIGNMENT (regardless of direction) ---
-        if any(r.subsidized for r in riders):
+        if getattr(match, "group_subsidy", False):
             idx = _find_group_voucher(df, airport, ride_date)
             if idx is not None:
                 voucher = df.loc[idx, "voucher_link"]

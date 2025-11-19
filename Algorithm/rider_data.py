@@ -86,12 +86,6 @@ class RiderData:
 
         resp = q.execute()
         
-        print("\n=== DEBUG: RAW FLIGHT ROWS ===")
-        for row in resp.data or []:
-            print(row)
-
-        print("=== END DEBUG ===\n")
-
         return resp.data or []
 
 
@@ -114,10 +108,7 @@ class RiderData:
         school_by_uid = self.fetch_users(uid_list)
         riders: List[RiderLite] = []
 
-        print("\n=== DEBUG: CONSTRUCTED FLIGHT -> RIDERLITE MAPPING ===")
         for f in flights:
-            print("FLIGHT:", f)
-            print("=== END DEBUG ===\n")
             school = school_by_uid.get(f["user_id"])
             if not school:
                 continue

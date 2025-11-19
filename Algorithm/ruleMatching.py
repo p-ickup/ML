@@ -361,6 +361,84 @@ def _second_pass_leftovers(leftovers: List[RiderLite], bucket_key: Optional[str]
     remaining = [r for k, r in enumerate(leftovers) if k not in used]
     return new_matches, remaining
 
+def _promote_lax_twos(matches: List[Match], bucket_key: Optional[str]) -> List[Match]:
+    """
+    LAX rule:
+    For any 2-person group in a LAX bucket:
+      - If there are other matches in the SAME bucket/date,
+      - Try to upgrade the 2-group to a 3-group by stealing exactly one rider
+        from another matched group (donor group),
+      - Only perform swaps where BOTH resulting groups remain valid.
+
+    This runs AFTER all normal matching passes, without changing any core logic.
+    """
+    if not bucket_key or "LAX" not in bucket_key:
+        return matches  # only modify LAX buckets
+
+    # Group matches by date so promotions only occur within same date
+    matches_by_date: Dict[str, List[Match]] = {}
+    for m in matches:
+        d = m.riders[0].date
+        matches_by_date.setdefault(d, []).append(m)
+
+    # Work on the existing objects (Match objects are mutable)
+    for date, ms in matches_by_date.items():
+        # all 2-person matches
+        twos = [m for m in ms if len(m.riders) == 2]
+
+        # need at least 2 matches total to perform donor stealing
+        if len(ms) <= 1:
+            continue
+
+        for m2 in twos:
+            A, B = m2.riders  # the two riders to promote
+
+            # search donor groups
+            for donor in ms:
+                if donor is m2:
+                    continue  # cannot steal from itself
+
+                # try each rider in donor group
+                for X in list(donor.riders):
+                    new_big = [A, B, X]
+                    new_donor = [r for r in donor.riders if r is not X]
+
+                    # enforce group sizes 2–4
+                    if not (2 <= len(new_donor) <= 4):
+                        continue
+
+                    # both groups must remain valid
+                    if not _is_valid_group(new_big):
+                        continue
+                    if not _is_valid_group(new_donor):
+                        continue
+
+                    # --- APPLY THE SWAP ---
+
+                    # rewrite the upgraded group
+                    rebuilt_big = _group_to_match(new_big, bucket_key)
+                    m2.riders = rebuilt_big.riders
+                    m2.suggested_time_iso = rebuilt_big.suggested_time_iso
+                    m2.terminal = rebuilt_big.terminal
+
+                    # rewrite donor group
+                    rebuilt_donor = _group_to_match(new_donor, bucket_key)
+                    donor.riders = rebuilt_donor.riders
+                    donor.suggested_time_iso = rebuilt_donor.suggested_time_iso
+                    donor.terminal = rebuilt_donor.terminal
+
+                    # only perform ONE successful upgrade per 2-group
+                    break
+
+                else:
+                    # donor group had no valid donor X → try next donor group
+                    continue
+
+                # break after successful swap
+                break
+
+    return matches
+
 
 # convert a group to a Match with suggested time at overlap midpoint
 def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) -> Match:
@@ -475,6 +553,9 @@ def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> T
     # FINAL leftover matching pass (cleanup)
     final_new, leftovers = _second_pass_leftovers(leftovers, bucket_key=bucket_key)
     matches.extend(final_new)
+
+    # FINAL PASS: LAX rule → promote 2-person groups to 3-person groups if possible
+    matches = _promote_lax_twos(matches, bucket_key)
 
     # compose diagnostics for leftovers
     diag = audit.finalize_unmatched_diag(riders, bucket_key, pairs, pair_diag, feasible_count, used)

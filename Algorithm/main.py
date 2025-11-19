@@ -54,11 +54,23 @@ def _split_iso(dt_iso: str) -> Tuple[str, str]:
     return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
 
 # write matches to csv (one row per rider, grouped by a simulated ride_id; uses earliest-overlap date/time)
-def _write_matches_csv(matches: List[Match], csv_path: str) -> None:
+def _write_matches_csv(matches: List[Match], all_riders: List[RiderLite], csv_path: str) -> None:
     """
     Write matches to a CSV (one row per matched ride group).
-    Includes earliest_time, latest_time, and suggested_time for easy inspection.
+    Also prints how many flights were matched vs unmatched.
     """
+    
+    # print("\n================= DEBUG: GROUPS AT CSV WRITE =================")
+    # for idx, m in enumerate(matches, start=1):
+    #     print(f"[CSV {idx}] bucket={m.bucket_key}, size={len(m.riders)}")
+    #     for r in m.riders:
+    #         print(
+    #             f"   flight_id={r.flight_id}, user_id={r.user_id}, "
+    #             f"school={r.school}, subsidized={r.subsidized}, id={id(r)}"
+    #         )
+    # print("===============================================================\n")
+    
+    
     if not matches:
         print("No matches to write.")
         return
@@ -66,10 +78,17 @@ def _write_matches_csv(matches: List[Match], csv_path: str) -> None:
     rows = []
     for idx, m in enumerate(matches, start=1):
         sim_ride_id = idx
-
+        
+        # # DEBUG BLOCK
+        # print(f"\n[CSV WRITE — GROUP {sim_ride_id}] "
+        #     f"bucket={m.bucket_key}, size={len(m.riders)}, "
+        #     f"airport={m.riders[0].airport if m.riders else None}")
+        
         # compute window across all riders
         starts, ends = [], []
         for r in m.riders:
+            # print(f"   Rider flight_id={r.flight_id}, user_id={r.user_id}, "
+            #   f"school={r.school}, subsidized={r.subsidized}")
             s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
             e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
             starts.append(s)
@@ -117,9 +136,7 @@ def _write_matches_csv(matches: List[Match], csv_path: str) -> None:
             "earliest_time": earliest_time,
             "latest_time": latest_time,
             "suggested_time": suggested_time,
-            "suggested_time_iso": suggested_time_iso,
-            "terminal": m.terminal or "",
-            "match_times": match_times,                # <— NEW COLUMN
+            "match_times": match_times,
             "bags_total": total_bags,
             "num_riders": len(m.riders),
             "riders": json.dumps(rider_user_ids),
@@ -134,7 +151,23 @@ def _write_matches_csv(matches: List[Match], csv_path: str) -> None:
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"Wrote dry-run CSV with {len(rows)} group rows → {csv_path}")
+    # ---------------------------------------------------------
+    # NEW BLOCK: same unmatched logic as DB version
+    # ---------------------------------------------------------
+    considered_ids = {r.flight_id for r in all_riders}
+
+    matched_ids = {
+        r.flight_id
+        for m in matches
+        for r in m.riders
+    }
+
+    unmatched_ids = list(considered_ids - matched_ids)
+
+    print(
+        f"Wrote dry-run CSV with {len(rows)} matched groups → {csv_path}\n"
+        f"Matched flights: {len(matched_ids)} | Unmatched flights: {len(unmatched_ids)}"
+    )
 
 def _write_unmatched_with_reasons(unmatched: List[RiderLite], reasons: dict, csv_path: str) -> None:
     rows = []
@@ -167,7 +200,7 @@ def _write_unmatched_with_reasons(unmatched: List[RiderLite], reasons: dict, csv
 
 # persist matches to Supabase (create one Rides row per group; insert Matches rows with SAME ride_id;
 # set Flights.matched = true; include earliest-overlap date/time and voucher_given=false)
-def _write_matches_db(sb: Client, matches: List[Match]) -> None:
+def _write_matches_db(sb: Client, matches: List[Match], all_riders: List[RiderLite]) -> None:
     if not matches:
         print("No matches to write.")
         return
@@ -208,48 +241,83 @@ def _write_matches_db(sb: Client, matches: List[Match]) -> None:
         if flight_ids:
             sb.table("Flights").update({"matched": True}).in_("flight_id", flight_ids).execute()
 
-    print(f"Wrote {len(matches)} groups to Supabase and updated Flights.matched.")
+    considered_ids = {r.flight_id for r in all_riders}
+
+    matched_ids = {
+        r.flight_id
+        for m in matches
+        for r in m.riders
+    }
+
+    unmatched_ids = list(considered_ids - matched_ids)
+
+    if unmatched_ids:
+        sb.table("Flights").update({"matched": False}).in_("flight_id", unmatched_ids).execute()
+
+    print(
+        f"Wrote {len(matches)} groups to Supabase and updated Flights.matched. "
+        f"Marked {len(matched_ids)} matched=True and {len(unmatched_ids)} matched=False."
+    )
 
 
 def apply_group_subsidy(matches: list[Match], thresholds: Dict[str, int]) -> None:
-    """
-    A group is subsidized only if:
-      • the group's size >= airport threshold (e.g., LAX:3, ONT:2)
-      • AND all riders are Pomona students.
-    """
-    for m in matches:
+    print("\n================= DEBUG: GROUPS BEFORE SUBSIDY =================")
+    for i, m in enumerate(matches, start=1):
+        print(f"[PRE-SUB {i}] bucket={m.bucket_key}, size={len(m.riders)}")
+        for r in m.riders:
+            print(
+                f"   flight_id={r.flight_id}, user_id={r.user_id}, "
+                f"school={r.school}, subsidized={r.subsidized}, id={id(r)}"
+            )
+    print("================================================================\n")
+
+    for i, m in enumerate(matches, start=1):
+        sim_ride_id = i
         if not m.riders:
             continue
 
-        # Check airport majority (should already be consistent)
-        counts: Dict[str, int] = {}
-        for r in m.riders:
-            a = (r.airport or "").upper()
-            counts[a] = counts.get(a, 0) + 1
-
-        group_airport = max(counts.items(), key=lambda kv: kv[1])[0]
-
-        # Get required group size threshold for this airport
+        group_airport = (m.riders[0].airport or "").strip().upper()
         need = thresholds.get(group_airport)
-        if need is None:
-            continue
 
-        # Check size requirement
-        if len(m.riders) < need:
-            continue
+        group_size = len(m.riders)
+        
+        all_pomona = all((r.school or "").strip().upper() == "POMONA"
+                         for r in m.riders)
 
-        # NEW RULE: all riders must be Pomona students
-        all_pomona = all(
-            (r.school or "").strip().upper() == "POMONA"
-            for r in m.riders
+        qualifies = (
+            need is not None and
+            group_size >= need and
+            all_pomona
         )
+        
+        if (group_size < need):
+            qualifies = False
+        
+        # NEW: store group-level flag on Match
+        m.group_subsidy = qualifies
 
-        if not all_pomona:
-            continue
-
-        # If both conditions satisfied → subsidize entire group
         for r in m.riders:
-            r.subsidized = True
+            
+            r.subsidized = qualifies
+            # print(r, qualifies)
+            
+        # print(group_airport, need, group_size, qualifies)
+        
+            
+
+    print("\n================= DEBUG: GROUPS AFTER SUBSIDY =================")
+    for i, m in enumerate(matches, start=1):
+        print(f"[POST-SUB {i}] bucket={m.bucket_key}, size={len(m.riders)}")
+        for r in m.riders:
+            print(
+                f"   flight_id={r.flight_id}, user_id={r.user_id}, "
+                f"school={r.school}, subsidized={r.subsidized}, id={id(r)}"
+            )
+    print("================================================================\n")
+        # print(
+        #     f"[GROUP {sim_ride_id}] airport={group_airport}, size={group_size}, "
+        #     f"need={need}, all_pomona={all_pomona}, subsidized={qualifies}"
+        # )
 
 
 # run full pipeline (fetch → bucket → match → write or dry-run)
@@ -299,12 +367,12 @@ def run(
     # report summary
     print(f"Buckets: {len(buckets)} | Groups: {len(all_matches)} | Unmatched: {len(all_unmatched)}")
 
-    _write_matches_csv(all_matches, csv_path)
+    _write_matches_csv(all_matches, riders, csv_path)
     _write_unmatched_with_reasons(all_unmatched, all_diag, unmatched_csv_path)
 
     # DB writes only if not dry-run
     if not dry_run:
-        ride_ids = _write_matches_db(supabase, all_matches)
+        ride_ids = _write_matches_db(supabase, all_matches, riders)
     else:
         ride_ids = []
 
