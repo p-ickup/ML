@@ -2,8 +2,9 @@
 # Single source of truth for knobs/policies
 
 # Group Matching Constraints
-MAX_TOTAL_BAGS = 8
-MAX_LARGE_BAGS = 4
+MAX_TOTAL_BAGS = 12
+MAX_LARGE_BAGS = 5
+MAX_GROUP_SIZE = 5
 
 # Policy Toggles
 TERMINAL_MODE = "slack"  # terminal matching policy - strict enforces exact terminal matches only

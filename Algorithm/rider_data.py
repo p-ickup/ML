@@ -57,6 +57,7 @@ class RiderLite:
     bags_no_large: Optional[int]
     bag_no_personal: Optional[int]
     name: Optional[str] = None
+    airline_iata: Optional[str] = None
     subsidized: bool = False
 
 class RiderData:
@@ -72,7 +73,7 @@ class RiderData:
         q = (
             self.sb.table("Flights")
             .select(
-                "flight_id,user_id,flight_no,earliest_time,latest_time,"
+                "flight_id,user_id,flight_no,airline_iata,earliest_time,latest_time,"
                 "airport,date,to_airport,terminal,matched,bag_no,bag_no_large,bag_no_personal"
             )
             .gt("date", today.isoformat())
@@ -131,6 +132,7 @@ class RiderData:
                     user_id=f["user_id"],
                     flight_id=int(f["flight_id"]),
                     flight_no=(int(f["flight_no"]) if f.get("flight_no") is not None else None),
+                    airline_iata=f.get("airline_iata"),
                     earliest_time=str(f.get("earliest_time")),
                     latest_time=str(f.get("latest_time")),
                     airport=normalize_airport(f.get("airport")),

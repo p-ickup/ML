@@ -1,4 +1,5 @@
 # matching.py
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
@@ -96,7 +97,7 @@ def _bags_totals(members: List[RiderLite]) -> Tuple[int, int, int, int]:
 
 # quick validity check (size, time overlap, bag capacity, terminal strict)
 def _is_valid_group(members: List[RiderLite]) -> bool:
-    if not (2 <= len(members) <= 4):
+    if not (2 <= len(members) <= config.MAX_GROUP_SIZE):
         return False
 
     eff_min = _effective_overlap_minutes(members)
@@ -137,8 +138,10 @@ def _best_absorb_slot(matches: List[Match], rider: RiderLite) -> Optional[Tuple[
     
     best: Optional[Tuple[int, List[RiderLite], float]] = None
 
-    # Prefer filling 3->4 first, then 2->3, then 1->2 (rare), tie-break by best score gain
-    size_order = [3, 2, 1]
+    # Prefer filling larger groups first (e.g., 4->5, then 3->4, then 2->3, then 1->2), tie-break by best score gain
+    # Build size order dynamically based on MAX_GROUP_SIZE (largest first, then smaller)
+    max_size = config.MAX_GROUP_SIZE
+    size_order = list(range(max_size - 1, 0, -1))  # e.g., if MAX_GROUP_SIZE=5: [4, 3, 2, 1]
     for target_size in size_order:
         for mi, M in enumerate(matches):
             group = M.riders
@@ -171,8 +174,8 @@ def _third_pass_absorb_leftovers(
 ) -> Tuple[List[Match], List[RiderLite]]:
     """
     Greedy absorption pass:
-    - For each leftover L, try to insert into an existing group with len<4.
-    - Prefer 3->4, then 2->3, picking the insertion with the highest score gain.
+    - For each leftover L, try to insert into an existing group with len < MAX_GROUP_SIZE.
+    - Prefer larger groups first (e.g., 4->5, then 3->4, then 2->3), picking the insertion with the highest score gain.
     - Recompute Match (suggested_time_iso/terminal) when a group changes.
     """
     if not leftovers or not matches:
@@ -245,15 +248,15 @@ def _split_full_group_for_leftovers(
                 
             rescued = False
 
-            # check every existing 4-person group
+            # check every existing MAX_GROUP_SIZE-person group
             for mi, M in enumerate(ms):
-                if len(M.riders) != 4:
+                if len(M.riders) != config.MAX_GROUP_SIZE:
                     continue
 
                 group4 = M.riders
 
                 # try removing exactly one member X
-                for x_idx in range(4):
+                for x_idx in range(config.MAX_GROUP_SIZE):
                     X = group4[x_idx]
                     group3 = group4[:x_idx] + group4[x_idx+1:]
 
@@ -314,7 +317,7 @@ def _score_group(members: List[RiderLite], validate: bool = False) -> float:
     if eff_min < 0:
         return float("-inf")
 
-    # touching → give a tiny floor so they’re not always siphoned away
+    # touching → give a tiny floor so they're not always siphoned away
     time_fit_min = eff_min if eff_min > 0 else config.TOUCH_FLOOR_MIN
 
     tpen = _terminal_penalty(members)
@@ -323,8 +326,27 @@ def _score_group(members: List[RiderLite], validate: bool = False) -> float:
     # reward groups that use bag capacity well (scaled to MAX_TOTAL_BAGS)
     fill = min(total_all / config.MAX_TOTAL_BAGS, 1.0)
     bag_bonus = 0.5 * fill
+    
+    # Bonus for groups with riders on the same flight (airline_iata + flight_no)
+    # Create flight identifiers by combining airline_iata and flight_no
+    flight_ids = []
+    for m in members:
+        if m.airline_iata and m.flight_no is not None:
+            flight_ids.append(f"{m.airline_iata}{m.flight_no}")
+        elif m.flight_no is not None:
+            # Fallback to just flight_no if airline_iata is missing
+            flight_ids.append(str(m.flight_no))
+    
+    if flight_ids:
+        flight_counts = Counter(flight_ids)
+        max_same_flight = max(flight_counts.values())
+        # Bonus: 2 points per rider on the same flight (e.g., 2 riders = 2 points, 3 riders = 4 points, 4 riders = 6 points)
+        # This encourages matching people on the same flight
+        same_flight_bonus = (max_same_flight - 1) * 2.0 if max_same_flight > 1 else 0.0
+    else:
+        same_flight_bonus = 0.0
 
-    return time_fit_min - (tpen * 1000.0) + bag_bonus
+    return time_fit_min - (tpen * 1000.0) + bag_bonus + same_flight_bonus
 
 
 
@@ -354,14 +376,14 @@ def _select_pairs(pairs: List[Tuple[int, int, float]]) -> List[Tuple[int, int]]:
     return selected
 
 
-# greedily expand a pair to up to 4 members (respecting validity and score)
+# greedily expand a pair to up to MAX_GROUP_SIZE members (respecting validity and score)
 def _expand_group(seed: List[RiderLite], candidates: List[RiderLite], matched_flight_ids: Optional[set] = None) -> List[RiderLite]:
     if matched_flight_ids is None:
         matched_flight_ids = set()
     # Track flight_ids already in the seed group
     seed_flight_ids = {r.flight_id for r in seed}
     group = list(seed)
-    while len(group) < 4:
+    while len(group) < config.MAX_GROUP_SIZE:
         best = None
         best_score = float("-inf")
         for c in candidates:
@@ -474,8 +496,8 @@ def _promote_lax_twos(matches: List[Match], bucket_key: Optional[str]) -> List[M
                     new_big = [A, B, X]
                     new_donor = [r for r in donor.riders if r is not X]
 
-                    # enforce group sizes 2–4
-                    if not (2 <= len(new_donor) <= 4):
+                    # enforce group sizes 2–MAX_GROUP_SIZE
+                    if not (2 <= len(new_donor) <= config.MAX_GROUP_SIZE):
                         continue
 
                     # both groups must remain valid
@@ -622,10 +644,10 @@ def _lax_optimize_4_and_2(matches: List[Match], bucket_key: Optional[str] = None
     total_swaps = 0
     
     for date, ms in matches_by_date.items():
-        # Find 2-person and 4-person groups for this date
+        # Find 2-person and MAX_GROUP_SIZE-person groups for this date
         twos = [m for m in ms if len(m.riders) == 2]
-        fours = [m for m in ms if len(m.riders) == 4]
-        others = [m for m in ms if len(m.riders) not in [2, 4]]  # Keep other groups as-is
+        fours = [m for m in ms if len(m.riders) == config.MAX_GROUP_SIZE]
+        others = [m for m in ms if len(m.riders) not in [2, config.MAX_GROUP_SIZE]]  # Keep other groups as-is
         
         if not twos or not fours:
             # No optimization possible for this date, keep all matches as-is
@@ -758,35 +780,26 @@ def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) ->
     # All riders in a group ALWAYS share same direction (bucket guarantee)
     to_airport = group[0].to_airport
 
-    # Base suggested time BEFORE offset
+    # Time assignment based on direction
     if earliest_end <= latest_start:
         # touching window fallback
         chosen = latest_start
     else:
         if to_airport:
-            # going TO airport → choose END of overlap
-            chosen = earliest_end
+            # going TO airport → latest overlap with 15 minute buffer before if possible
+            chosen = earliest_end - timedelta(minutes=15)
+            # Clamp to within overlap window
+            if chosen < latest_start:
+                chosen = latest_start
         else:
-            # coming FROM airport → choose START of overlap
-            chosen = latest_start
-
-    # Apply configurable offsets:
-    # Negative → earlier, Positive → later
-    if to_airport:
-        offset_min = getattr(config, "TO_AIRPORT_OFFSET_MIN", 0)
-    else:
-        offset_min = getattr(config, "FROM_AIRPORT_OFFSET_MIN", 0)
-
-    chosen_offset = chosen + timedelta(minutes=offset_min)
-
-    # Clamp chosen time to within the overlap
-    if chosen_offset < latest_start:
-        chosen_offset = latest_start
-    if chosen_offset > earliest_end:
-        chosen_offset = earliest_end
+            # coming FROM airport → earliest overlap with 10 minute buffer if possible
+            chosen = latest_start + timedelta(minutes=10)
+            # Clamp to within overlap window
+            if chosen > earliest_end:
+                chosen = earliest_end
 
     # Normalize seconds
-    chosen_offset = chosen_offset.replace(second=0, microsecond=0)
+    chosen = chosen.replace(second=0, microsecond=0)
 
     # Terminal handling (strict mode)
     terms = [g.terminal or "" for g in group]
@@ -794,10 +807,102 @@ def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) ->
 
     return Match(
         riders=group,
-        suggested_time_iso=chosen_offset.isoformat(),
+        suggested_time_iso=chosen.isoformat(),
         terminal=terminal,
         bucket_key=bucket_key,
     )
+
+
+def _final_leftovers(
+    matches: List[Match],
+    leftovers: List[RiderLite],
+    bucket_key: Optional[str] = None
+) -> Tuple[List[Match], List[RiderLite]]:
+    """
+    Final aggressive pass to place any remaining unmatched riders into existing groups.
+    Allows 0-minute overlaps (touching windows, e.g., 9:45 start and 9:45 end).
+    Works even if riders were previously dominated or couldn't form pairs.
+    Only places riders into groups that are < MAX_GROUP_SIZE.
+    """
+    if not leftovers or not matches:
+        return matches, leftovers
+    
+    # Build set of all flight_ids already matched
+    matched_flight_ids = {r.flight_id for m in matches for r in m.riders}
+    
+    ms = list(matches)
+    lo = list(leftovers)
+    remaining_leftovers = []
+    
+    for leftover in lo:
+        # Skip if this rider's flight_id is already matched
+        if leftover.flight_id in matched_flight_ids:
+            remaining_leftovers.append(leftover)
+            continue
+        
+        best_match_idx = None
+        
+        # Try to find any existing group < MAX_GROUP_SIZE that can accept this rider
+        for mi, M in enumerate(ms):
+            group = M.riders
+            
+            # Skip groups that are already at max size
+            if len(group) >= config.MAX_GROUP_SIZE:
+                continue
+            
+            # Check if this rider's flight_id is already in this group
+            if leftover.flight_id in {r.flight_id for r in group}:
+                continue
+            
+            # Try adding the leftover to this group
+            trial = group + [leftover]
+            
+            # Check time overlap - allow 0-minute overlaps (touching windows)
+            starts = []
+            ends = []
+            for m in trial:
+                s, e = _interval(m)
+                starts.append(s)
+                ends.append(e)
+            latest_start = max(starts)
+            earliest_end = min(ends)
+            overlap_min = (earliest_end - latest_start).total_seconds() / 60.0
+            
+            # Allow if overlap >= 0 (including 0-minute touching windows)
+            if overlap_min < 0:
+                continue
+            
+            # Check other validity constraints (bags, terminal) but allow 0-minute overlaps
+            # Check bag capacity
+            total_large, total_normal, total_personal, total_all = _bags_totals(trial)
+            if total_large > config.MAX_LARGE_BAGS:
+                continue
+            if total_all > config.MAX_TOTAL_BAGS:
+                continue
+            
+            # Check terminal if in strict mode
+            if config.TERMINAL_MODE == "strict":
+                terms = [m.terminal or "" for m in trial]
+                if len(set(terms)) > 1:
+                    continue
+            
+            # This group can accept the leftover
+            best_match_idx = mi
+            break  # Take the first valid group we find
+        
+        if best_match_idx is not None:
+            # Add the leftover to the group
+            M = ms[best_match_idx]
+            new_group = M.riders + [leftover]
+            # Recreate the match with the new group
+            ms[best_match_idx] = _group_to_match(new_group, bucket_key=bucket_key)
+            # Track that this rider is now matched
+            matched_flight_ids.add(leftover.flight_id)
+        else:
+            # Couldn't place this leftover anywhere
+            remaining_leftovers.append(leftover)
+    
+    return ms, remaining_leftovers
 
 
 # perform matching inside a single bucket
@@ -872,6 +977,9 @@ def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> T
     
     # LAX OPTIMIZATION: Try to convert 4-person + 2-person groups into 3-person + 3-person groups
     matches = _lax_optimize_4_and_2(matches, bucket_key=bucket_key)
+
+    # FINAL LEFTOVERS PASS: Try to place any remaining unmatched riders into existing groups
+    matches, leftovers = _final_leftovers(matches, leftovers, bucket_key=bucket_key)
 
     # compose diagnostics for leftovers
     diag = audit.finalize_unmatched_diag(riders, bucket_key, pairs, pair_diag, feasible_count, used)

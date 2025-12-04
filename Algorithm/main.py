@@ -151,9 +151,7 @@ def _write_matches_csv(matches: List[Match], all_riders: List[RiderLite], csv_pa
         writer.writeheader()
         writer.writerows(rows)
 
-    # ---------------------------------------------------------
-    # NEW BLOCK: same unmatched logic as DB version
-    # ---------------------------------------------------------
+
     considered_ids = {r.flight_id for r in all_riders}
 
     matched_ids = {
