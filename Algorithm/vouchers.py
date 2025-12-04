@@ -86,16 +86,23 @@ def assign_vouchers(matches: List[Match], voucher_csv_path: str, dry_run: bool =
                 for r in riders:
                     r.group_voucher = None
 
-        # --- CONTINGENCY VOUCHERS (inbound only) ---
-        for r in riders:
-            if not r.to_airport:  # inbound
-                idx = _find_contingency_voucher(df, airport)
-                if idx is not None:
-                    voucher = df.loc[idx, "voucher_link"]
-                    r.contingency_voucher = voucher
-                    df.at[idx, "USED"] = True
-                else:
-                    r.contingency_voucher = None
+        # --- CONTINGENCY VOUCHERS (inbound only, subsidized groups only) ---
+        # Only assign contingency vouchers to subsidized groups when to_airport is False
+        is_subsidized = getattr(match, "group_subsidy", False)
+        if is_subsidized:
+            for r in riders:
+                if not r.to_airport:  # inbound
+                    idx = _find_contingency_voucher(df, airport)
+                    if idx is not None:
+                        voucher = df.loc[idx, "voucher_link"]
+                        r.contingency_voucher = voucher
+                        df.at[idx, "USED"] = True
+                    else:
+                        r.contingency_voucher = None
+        else:
+            # Non-subsidized groups don't get contingency vouchers
+            for r in riders:
+                r.contingency_voucher = None
 
     df.to_csv(working_path, index=False)
     return working_path

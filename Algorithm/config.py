@@ -2,7 +2,7 @@
 # Single source of truth for knobs/policies
 
 # Group Matching Constraints
-MAX_TOTAL_BAGS = 10
+MAX_TOTAL_BAGS = 8
 MAX_LARGE_BAGS = 4
 
 # Policy Toggles
@@ -26,6 +26,9 @@ LOCAL_IMPROVE_TOL = 0.0   # require >= this improvement in group score to add a 
 SPLIT_4_TO_3_2 = True  # set False to disable
 
 ABSORB_LEFTOVERS = True
+
+# Prefer subsidized groups when making matching decisions
+PREFER_SUBSIDIZED = False  # set True to prioritize subsidized groups
 
 # Offset minutes applied when picking suggested match time
 TO_AIRPORT_OFFSET_MIN = -10       # leave 10 min earlier (move backward)

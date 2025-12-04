@@ -111,7 +111,7 @@ def _write_matches_csv(matches: List[Match], all_riders: List[RiderLite], csv_pa
             suggested_time = ""
 
         # rider details
-        rider_user_ids = [r.user_id for r in m.riders]
+        rider_names = [r.name or r.user_id for r in m.riders]
         total_bags = sum(
             int(r.bags_no or 0) +
             int(r.bags_no_large or 0) +
@@ -139,10 +139,10 @@ def _write_matches_csv(matches: List[Match], all_riders: List[RiderLite], csv_pa
             "match_times": match_times,
             "bags_total": total_bags,
             "num_riders": len(m.riders),
-            "riders": json.dumps(rider_user_ids),
+            "riders": json.dumps(rider_names),
             "voucher": m.group_voucher,
             "contingency_vouchers": json.dumps([getattr(r, "contingency_voucher", "") for r in m.riders]),
-            "subsidized": any(r.subsidized for r in m.riders)
+            "subsidized": getattr(m, "group_subsidy", False)
         })
 
     fieldnames = list(rows[0].keys())
@@ -230,7 +230,7 @@ def _write_matches_db(sb: Client, matches: List[Match], all_riders: List[RiderLi
                 "voucher": getattr(r, "group_voucher", ""),
                 "contingency_voucher": getattr(r, "contingency_voucher", None),
                 "is_verified": False,
-                "subsidized": r.subsidized,        # ← NEW LINE
+                "is_subsidized": r.subsidized,
             })
             flight_ids.append(r.flight_id)
 
@@ -261,19 +261,31 @@ def _write_matches_db(sb: Client, matches: List[Match], all_riders: List[RiderLi
 
 
 def apply_group_subsidy(matches: list[Match], thresholds: Dict[str, int]) -> None:
-    print("\n================= DEBUG: GROUPS BEFORE SUBSIDY =================")
-    for i, m in enumerate(matches, start=1):
-        print(f"[PRE-SUB {i}] bucket={m.bucket_key}, size={len(m.riders)}")
-        for r in m.riders:
-            print(
-                f"   flight_id={r.flight_id}, user_id={r.user_id}, "
-                f"school={r.school}, subsidized={r.subsidized}, id={id(r)}"
-            )
-    print("================================================================\n")
 
+    # First, reset ALL riders to False to ensure clean state
+    # Also track which riders appear in which matches
+    rider_to_matches: Dict[int, List[int]] = {}  # rider id -> list of match indices
+    all_riders_set: set = set()  # Track all unique rider objects
+    
     for i, m in enumerate(matches, start=1):
-        sim_ride_id = i
+        for r in m.riders:
+            r.subsidized = False
+            rider_id = id(r)
+            all_riders_set.add(rider_id)
+            if rider_id not in rider_to_matches:
+                rider_to_matches[rider_id] = []
+            rider_to_matches[rider_id].append(i)
+    
+    # Warn if any rider appears in multiple matches
+    for rider_id, match_indices in rider_to_matches.items():
+        if len(match_indices) > 1:
+            print(f"WARNING: Rider object {rider_id} appears in multiple matches: {match_indices}")
+
+    # PASS 1: Determine which matches qualify for subsidy
+    match_qualifies: Dict[int, bool] = {}  # match index -> qualifies
+    for i, m in enumerate(matches, start=1):
         if not m.riders:
+            match_qualifies[i] = False
             continue
 
         group_airport = (m.riders[0].airport or "").strip().upper()
@@ -290,34 +302,29 @@ def apply_group_subsidy(matches: list[Match], thresholds: Dict[str, int]) -> Non
             all_pomona
         )
         
-        if (group_size < need):
-            qualifies = False
         
-        # NEW: store group-level flag on Match
+        # Store group-level flag on Match
         m.group_subsidy = qualifies
+        match_qualifies[i] = qualifies
 
-        for r in m.riders:
-            
-            r.subsidized = qualifies
-            # print(r, qualifies)
-            
-        # print(group_airport, need, group_size, qualifies)
-        
-            
-
-    print("\n================= DEBUG: GROUPS AFTER SUBSIDY =================")
+    # PASS 2: Set subsidized for each rider within each match
+    # Within a match, ALL riders must have the same subsidized value (the match's qualification)
+    # This ensures consistency even if a rider appears in multiple matches
     for i, m in enumerate(matches, start=1):
-        print(f"[POST-SUB {i}] bucket={m.bucket_key}, size={len(m.riders)}")
+        qualifies = match_qualifies.get(i, False)
+        # All riders in this match get the same subsidized value
         for r in m.riders:
-            print(
-                f"   flight_id={r.flight_id}, user_id={r.user_id}, "
-                f"school={r.school}, subsidized={r.subsidized}, id={id(r)}"
-            )
-    print("================================================================\n")
-        # print(
-        #     f"[GROUP {sim_ride_id}] airport={group_airport}, size={group_size}, "
-        #     f"need={need}, all_pomona={all_pomona}, subsidized={qualifies}"
-        # )
+            r.subsidized = qualifies
+        
+        # Verify all riders in this match have the same value (force consistency)
+        subsidized_values = {r.subsidized for r in m.riders}
+        if len(subsidized_values) > 1:
+            print(f"ERROR: Match {i} has conflicting subsidized values after setting: {subsidized_values}")
+            print(f"  Forcing all riders to match qualification: {qualifies}")
+            # Force all to match the match's qualification
+            for r in m.riders:
+                r.subsidized = qualifies
+
 
 
 # run full pipeline (fetch → bucket → match → write or dry-run)
