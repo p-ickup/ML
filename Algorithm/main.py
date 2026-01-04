@@ -10,6 +10,8 @@ import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 
+import config
+import nepo
 from buckets import bucket_names, make_buckets
 from dotenv import load_dotenv
 from rider_data import RiderData, RiderLite
@@ -112,7 +114,16 @@ def _write_matches_csv(matches: List[Match], all_riders: List[RiderLite], csv_pa
 
         # rider details
         rider_names = [r.name or r.user_id for r in m.riders]
-        total_bags = sum(
+        # Calculate number of large bags, normal bags, and personal bags (counts, not units)
+        num_large_bags = sum(int(r.bags_no_large or 0) for r in m.riders)
+        num_normal_bags = sum(int(r.bags_no or 0) for r in m.riders)
+        num_personal_bags = sum(int(getattr(r, "bag_no_personal", 0) or 0) for r in m.riders)
+        # Considered bags in units: large bags count as LARGE_BAG_MULTIPLIER, normal as 1, personal as 0 (if PERSONAL_CONSTRAINT is False)
+        considered_bags = (num_large_bags * config.LARGE_BAG_MULTIPLIER) + num_normal_bags
+        if config.PERSONAL_CONSTRAINT:
+            considered_bags += num_personal_bags
+        # Total bags (all types: normal + large + personal)
+        bags_total = sum(
             int(r.bags_no or 0) +
             int(r.bags_no_large or 0) +
             int(getattr(r, "bag_no_personal", 0) or 0)
@@ -133,12 +144,17 @@ def _write_matches_csv(matches: List[Match], all_riders: List[RiderLite], csv_pa
             "ride_id_simulated": sim_ride_id,
             "bucket_key": m.bucket_key or "",
             "date": match_date,
+            "num_riders": len(m.riders),
+            "suggested_time": suggested_time,
             "earliest_time": earliest_time,
             "latest_time": latest_time,
-            "suggested_time": suggested_time,
             "match_times": match_times,
-            "bags_total": total_bags,
-            "num_riders": len(m.riders),
+            "considered_bags": considered_bags,
+            
+            "bags_total": bags_total,
+            "num_large_bags": num_large_bags,
+            "num_normal_bags": num_normal_bags,
+            "num_personal_bags": num_personal_bags,
             "riders": json.dumps(rider_names),
             "voucher": m.group_voucher,
             "contingency_vouchers": json.dumps([getattr(r, "contingency_voucher", "") for r in m.riders]),
@@ -356,6 +372,13 @@ def run(
 
     # iterate buckets and match
     for name, riders_in_bucket in buckets.items():
+        # Try nepo matching first (if enabled)
+        nepo_match, remaining_riders = nepo.force_nepo_match(riders_in_bucket, bucket_key=name)
+        if nepo_match:
+            all_matches.append(nepo_match)
+            riders_in_bucket = remaining_riders  # Continue with remaining riders
+        
+        # Regular matching on remaining riders
         matches, leftovers, diag = match_bucket(riders_in_bucket, bucket_key=name)  # 3 values
         all_matches.extend(matches)
         all_unmatched.extend(leftovers)

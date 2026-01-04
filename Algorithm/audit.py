@@ -18,6 +18,16 @@ def _interval(r: RiderLite) -> Tuple[datetime, datetime]:
 def _bags_for(r: RiderLite) -> int:
     return int(r.bags_no or 0) + int(r.bags_no_large or 0) + int(r.bag_no_personal or 0)
 
+# constrained bags for rider (excludes personal if PERSONAL_CONSTRAINT is False)
+# Large bags count as LARGE_BAG_MULTIPLIER in the total (but still count as 1 for MAX_LARGE_BAGS constraint)
+def _bags_for_constrained(r: RiderLite) -> int:
+    large_bags = int(r.bags_no_large or 0)
+    normal_bags = int(r.bags_no or 0)
+    total = (large_bags * config.LARGE_BAG_MULTIPLIER) + normal_bags
+    if config.PERSONAL_CONSTRAINT:
+        total += int(r.bag_no_personal or 0)
+    return total
+
 # reason for blocking a PAIR (None => feasible)
 def pair_block_reason(a: RiderLite, b: RiderLite) -> Optional[str]:
     a0, a1 = _interval(a); b0, b1 = _interval(b)
@@ -34,8 +44,8 @@ def pair_block_reason(a: RiderLite, b: RiderLite) -> Optional[str]:
         else:
             return "no_time_overlap"
 
-    # bag capacity for a pair
-    if (_bags_for(a) + _bags_for(b)) > config.MAX_TOTAL_BAGS:
+    # bag capacity for a pair (respects PERSONAL_CONSTRAINT setting)
+    if (_bags_for_constrained(a) + _bags_for_constrained(b)) > config.MAX_TOTAL_BAGS:
         return "bag_capacity"
 
     # terminal (strict)

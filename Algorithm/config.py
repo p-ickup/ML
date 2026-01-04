@@ -2,9 +2,11 @@
 # Single source of truth for knobs/policies
 
 # Group Matching Constraints
-MAX_TOTAL_BAGS = 12
+MAX_TOTAL_BAGS = 10
 MAX_LARGE_BAGS = 5
 MAX_GROUP_SIZE = 5
+PERSONAL_CONSTRAINT = False  # If False, personal bags don't count toward MAX_TOTAL_BAGS
+LARGE_BAG_MULTIPLIER = 2  # Large bags count as this value in MAX_TOTAL_BAGS (but still count as 1 for MAX_LARGE_BAGS)
 
 # Policy Toggles
 TERMINAL_MODE = "slack"  # terminal matching policy - strict enforces exact terminal matches only
@@ -30,6 +32,10 @@ ABSORB_LEFTOVERS = True
 
 # Prefer subsidized groups when making matching decisions
 PREFER_SUBSIDIZED = False  # set True to prioritize subsidized groups
+
+# Nepo matching - Force match specific user_ids if they're in the same bucket
+NEPO_MODE = True  # Set to True to enable nepo matching
+NEPO_USER_IDS = ["31124aae-5965-4b85-bf2e-658177b07698", "7f528f2f-036a-4360-9d20-70b513e2dacd", "306a6d1b-a52d-4d24-81ed-db3002433046"]  # List of user_ids to force match (e.g., ["user1", "user2", "user3"])
 
 # Offset minutes applied when picking suggested match time
 TO_AIRPORT_OFFSET_MIN = -10       # leave 10 min earlier (move backward)

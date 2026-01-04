@@ -91,7 +91,12 @@ def _bags_totals(members: List[RiderLite]) -> Tuple[int, int, int, int]:
         total_large += L
         total_normal += N
         total_personal += P
-    total_all = total_large + total_normal + total_personal
+    # Large bags count as LARGE_BAG_MULTIPLIER in total_all (but still count as 1 for MAX_LARGE_BAGS constraint)
+    # If PERSONAL_CONSTRAINT is False, exclude personal bags from total_all
+    if config.PERSONAL_CONSTRAINT:
+        total_all = (total_large * config.LARGE_BAG_MULTIPLIER) + total_normal + total_personal
+    else:
+        total_all = (total_large * config.LARGE_BAG_MULTIPLIER) + total_normal
     return total_large, total_normal, total_personal, total_all
 
 
@@ -111,9 +116,17 @@ def _is_valid_group(members: List[RiderLite]) -> bool:
     if total_large > config.MAX_LARGE_BAGS:
         return False
 
-    # Check total bag limit
-    if total_all > config.MAX_TOTAL_BAGS:
-        return False
+    # Check total bag limit (groups of 5 must have < 8 bags, groups of 3 can have <= 12, others <= 10)
+    group_size = len(members)
+    if group_size == 5:
+        if total_all >= 8:  # Groups of 5 must have <= 8 bags
+            return False
+    elif group_size == 3:
+        if total_all > 12:  # Groups of 3 can have <= 12 bags
+            return False
+    else:
+        if total_all > config.MAX_TOTAL_BAGS:  # Groups of 2 or 4 can have <= 10
+            return False
 
     if config.TERMINAL_MODE == "strict":
         terms = [m.terminal or "" for m in members]
@@ -786,14 +799,14 @@ def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) ->
         chosen = latest_start
     else:
         if to_airport:
-            # going TO airport → latest overlap with 15 minute buffer before if possible
+            # going TO airport → 15 minutes before latest time (earliest_end) if possible
             chosen = earliest_end - timedelta(minutes=15)
             # Clamp to within overlap window
             if chosen < latest_start:
                 chosen = latest_start
         else:
-            # coming FROM airport → earliest overlap with 10 minute buffer if possible
-            chosen = latest_start + timedelta(minutes=10)
+            # coming FROM airport → leave earliest: 15 minutes after earliest time overlap (latest_start) if possible
+            chosen = latest_start + timedelta(minutes=15)
             # Clamp to within overlap window
             if chosen > earliest_end:
                 chosen = earliest_end
@@ -877,8 +890,17 @@ def _final_leftovers(
             total_large, total_normal, total_personal, total_all = _bags_totals(trial)
             if total_large > config.MAX_LARGE_BAGS:
                 continue
-            if total_all > config.MAX_TOTAL_BAGS:
-                continue
+            # Groups of 5 must have < 8 bags, groups of 3 can have <= 12, others <= 10
+            trial_size = len(trial)
+            if trial_size == 5:
+                if total_all > 8:  # Groups of 5 must have < 8 bags
+                    continue
+            elif trial_size == 3:
+                if total_all > 12:  # Groups of 3 can have <= 12 bags
+                    continue
+            else:
+                if total_all > config.MAX_TOTAL_BAGS:  # Groups of 2 or 4 can have <= 10
+                    continue
             
             # Check terminal if in strict mode
             if config.TERMINAL_MODE == "strict":
