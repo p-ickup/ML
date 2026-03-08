@@ -45,7 +45,11 @@ def pair_block_reason(a: RiderLite, b: RiderLite) -> Optional[str]:
             return "no_time_overlap"
 
     # bag capacity for a pair (respects PERSONAL_CONSTRAINT setting)
-    if (_bags_for_constrained(a) + _bags_for_constrained(b)) > config.MAX_TOTAL_BAGS:
+    # Final pass can set FINAL_PASS_PAIR_BAG_LIMIT so pairs that form group-of-3 with 12 bags are allowed
+    pair_limit = getattr(config, "FINAL_PASS_PAIR_BAG_LIMIT", None)
+    if pair_limit is None:
+        pair_limit = config.MAX_TOTAL_BAGS
+    if (_bags_for_constrained(a) + _bags_for_constrained(b)) > pair_limit:
         return "bag_capacity"
 
     # terminal (strict)

@@ -1,4 +1,5 @@
 # matching.py
+import heapq
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -17,6 +18,7 @@ class Match:
     terminal: Optional[str]
     bucket_key: Optional[str] = None
     group_voucher: Optional[str] = None   # ← NEW FIELD
+    ride_type: Optional[str] = None       # e.g. "Connect" for LAX large groups
 
 
 # parse a rider's window into datetimes
@@ -57,6 +59,28 @@ def _intersection(members: List[RiderLite]) -> Tuple[datetime, datetime, int]:
     return start, end, minutes
 
 
+def _are_same_flight(members: List[RiderLite]) -> bool:
+    """
+    Check if all members are on the same flight (same airline_iata + flight_no + date).
+    """
+    if not members:
+        return False
+    
+    # Get flight identifiers for all members
+    flight_keys = []
+    for m in members:
+        if m.airline_iata and m.flight_no is not None:
+            flight_keys.append((m.airline_iata.upper(), m.flight_no, m.date))
+        elif m.flight_no is not None:
+            # Fallback to just flight_no if airline_iata is missing
+            flight_keys.append((None, m.flight_no, m.date))
+        else:
+            return False  # Can't determine if same flight without flight info
+    
+    # Check if all are the same
+    return len(set(flight_keys)) == 1
+
+
 def _effective_overlap_minutes(members: List[RiderLite]) -> int:
     # compute overlap across all members with grace
     starts, ends = [], []
@@ -71,6 +95,14 @@ def _effective_overlap_minutes(members: List[RiderLite]) -> int:
     # negative overlap: allow within grace as zero-length effective overlap
     if config.ALLOW_TOUCHING and (-overlap_min) <= config.OVERLAP_GRACE_MIN:
         return 0
+    
+    # If SAME_FLIGHT_PRIORITY is enabled and all members are on the same flight,
+    # allow larger negative overlaps (up to a generous grace period)
+    if config.SAME_FLIGHT_PRIORITY and _are_same_flight(members):
+        # Allow up to 60 minutes of negative overlap for same-flight matches
+        if (-overlap_min) <= 60:
+            return 0  # Treat as zero overlap (touching)
+    
     return -1  # signals no feasible overlap even with grace
 
 
@@ -100,6 +132,10 @@ def _bags_totals(members: List[RiderLite]) -> Tuple[int, int, int, int]:
     return total_large, total_normal, total_personal, total_all
 
 
+# When True, final-pass rules allow groups of 3 with max 12 bags (Uber XXL) and relaxed large-bag limit
+_final_pass_group3_rules = False
+
+
 # quick validity check (size, time overlap, bag capacity, terminal strict)
 def _is_valid_group(members: List[RiderLite]) -> bool:
     if not (2 <= len(members) <= config.MAX_GROUP_SIZE):
@@ -107,26 +143,35 @@ def _is_valid_group(members: List[RiderLite]) -> bool:
 
     eff_min = _effective_overlap_minutes(members)
     if eff_min < 0:  # truly no overlap even with grace
-        return False
+        # Exception: if SAME_FLIGHT_PRIORITY is enabled and all members are on same flight,
+        # allow the match even with poor overlap (effective_overlap_minutes will return 0 for same-flight)
+        if config.SAME_FLIGHT_PRIORITY and _are_same_flight(members):
+            pass  # Allow same-flight matches even with poor overlap
+        else:
+            return False
 
     # BAG CAPACITY RULES (configurable)
     total_large, total_normal, total_personal, total_all = _bags_totals(members)
-
-    # Check large bag limit
-    if total_large > config.MAX_LARGE_BAGS:
-        return False
-
-    # Check total bag limit (groups of 5 must have < 8 bags, groups of 3 can have <= 12, others <= 10)
     group_size = len(members)
-    if group_size == 5:
-        if total_all >= 8:  # Groups of 5 must have <= 8 bags
-            return False
-    elif group_size == 3:
-        if total_all > 12:  # Groups of 3 can have <= 12 bags
+
+    # Final pass: allow groups of 3 with max 12 bag units and up to 12 large bags (Uber XXL)
+    if _final_pass_group3_rules and group_size == 3:
+        if total_all > 12 or total_large > 12:
             return False
     else:
-        if total_all > config.MAX_TOTAL_BAGS:  # Groups of 2 or 4 can have <= 10
+        # Check large bag limit
+        if total_large > config.MAX_LARGE_BAGS:
             return False
+        # Check total bag limit (groups of 5 must have < 8 bags, groups of 3 can have <= 12, others <= 10)
+        if group_size == 5:
+            if total_all >= 8:  # Groups of 5 must have <= 8 bags
+                return False
+        elif group_size == 3:
+            if total_all > 12:  # Groups of 3 can have <= 12 bags
+                return False
+        else:
+            if total_all > config.MAX_TOTAL_BAGS:  # Groups of 2 or 4 can have <= 10
+                return False
 
     if config.TERMINAL_MODE == "strict":
         terms = [m.terminal or "" for m in members]
@@ -327,11 +372,20 @@ def _score_group(members: List[RiderLite], validate: bool = False) -> float:
         return float("-inf")
 
     eff_min = _effective_overlap_minutes(members)
-    if eff_min < 0:
+    
+    # If SAME_FLIGHT_PRIORITY is enabled and all members are on same flight,
+    # allow scoring even with negative overlap (it will be treated as 0)
+    is_same_flight = config.SAME_FLIGHT_PRIORITY and _are_same_flight(members)
+    
+    if eff_min < 0 and not is_same_flight:
         return float("-inf")
 
     # touching → give a tiny floor so they're not always siphoned away
-    time_fit_min = eff_min if eff_min > 0 else config.TOUCH_FLOOR_MIN
+    # For same-flight matches with poor overlap, use floor value
+    if is_same_flight and eff_min < 0:
+        time_fit_min = config.TOUCH_FLOOR_MIN
+    else:
+        time_fit_min = eff_min if eff_min > 0 else config.TOUCH_FLOOR_MIN
 
     tpen = _terminal_penalty(members)
     _, _, _, total_all = _bags_totals(members)
@@ -340,7 +394,7 @@ def _score_group(members: List[RiderLite], validate: bool = False) -> float:
     fill = min(total_all / config.MAX_TOTAL_BAGS, 1.0)
     bag_bonus = 0.5 * fill
     
-    # Bonus for groups with riders on the same flight (airline_iata + flight_no)
+    # Bonus for groups with riders on the same flight (airline_iata + flight_no + date)
     # Create flight identifiers by combining airline_iata and flight_no
     flight_ids = []
     for m in members:
@@ -353,9 +407,19 @@ def _score_group(members: List[RiderLite], validate: bool = False) -> float:
     if flight_ids:
         flight_counts = Counter(flight_ids)
         max_same_flight = max(flight_counts.values())
-        # Bonus: 2 points per rider on the same flight (e.g., 2 riders = 2 points, 3 riders = 4 points, 4 riders = 6 points)
-        # This encourages matching people on the same flight
-        same_flight_bonus = (max_same_flight - 1) * 2.0 if max_same_flight > 1 else 0.0
+        
+        # Check if all members are on the same flight (same airline_iata + flight_no + date)
+        is_same_flight = _are_same_flight(members)
+        
+        if config.SAME_FLIGHT_PRIORITY and is_same_flight:
+            # Massive bonus for same-flight matches when priority mode is enabled
+            # This ensures same-flight matches are prioritized even with poor time overlap
+            # Bonus scales with group size: 2 riders = 1000, 3 riders = 2000, 4 riders = 3000, etc.
+            same_flight_bonus = (max_same_flight - 1) * 1000.0 if max_same_flight > 1 else 0.0
+        else:
+            # Normal bonus: 2 points per rider on the same flight (e.g., 2 riders = 2 points, 3 riders = 4 points, 4 riders = 6 points)
+            # This encourages matching people on the same flight
+            same_flight_bonus = (max_same_flight - 1) * 2.0 if max_same_flight > 1 else 0.0
     else:
         same_flight_bonus = 0.0
 
@@ -826,6 +890,379 @@ def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) ->
     )
 
 
+def _ont_post_process_unmatched(
+    matches: List[Match],
+    unmatched: List[RiderLite],
+    voucher_csv_path: Optional[str] = None,
+    dry_run: bool = False,
+    sb: Optional[object] = None
+) -> Tuple[List[Match], List[RiderLite]]:
+    """
+    Post-processing for ONT unmatched individuals:
+    After all matching is complete, for unmatched individuals on a given day,
+    check existing matches (rides) on that same day where time overlap is possible.
+    Try to move one person from a group of 4 to be paired with an unmatched individual
+    to create a group of 2 (ONT only).
+    
+    Returns updated matches and remaining unmatched.
+    """
+    if not unmatched:
+        return matches, unmatched
+    
+    # Filter unmatched to only ONT riders
+    ont_unmatched = [u for u in unmatched if (u.airport or "").upper() == "ONT"]
+    if not ont_unmatched:
+        return matches, unmatched
+    
+    # Helper function to check if two time windows overlap (quick check)
+    def _time_windows_overlap(rider1: RiderLite, rider2: RiderLite) -> bool:
+        """Quick check if two riders' time windows overlap."""
+        s1 = datetime.fromisoformat(f"{rider1.date}T{rider1.earliest_time}")
+        e1 = datetime.fromisoformat(f"{rider1.date}T{rider1.latest_time}")
+        if e1 < s1:
+            e1 += timedelta(days=1)
+        
+        s2 = datetime.fromisoformat(f"{rider2.date}T{rider2.earliest_time}")
+        e2 = datetime.fromisoformat(f"{rider2.date}T{rider2.latest_time}")
+        if e2 < s2:
+            e2 += timedelta(days=1)
+        
+        # Overlap exists if latest_start < earliest_end
+        latest_start = max(s1, s2)
+        earliest_end = min(e1, e2)
+        return latest_start < earliest_end or (config.ALLOW_TOUCHING and latest_start == earliest_end)
+    
+    # Helper function to compute group time window
+    def _group_time_window(riders: List[RiderLite]) -> Tuple[datetime, datetime]:
+        """Compute the time window for a group (earliest start, latest end)."""
+        starts, ends = [], []
+        for r in riders:
+            s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
+            e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
+            if e < s:
+                e += timedelta(days=1)
+            starts.append(s)
+            ends.append(e)
+        return max(starts), min(ends)
+    
+    # Group unmatched by date
+    unmatched_by_date: Dict[str, List[RiderLite]] = {}
+    for u in ont_unmatched:
+        unmatched_by_date.setdefault(u.date, []).append(u)
+    
+    # Group matches by date and filter for ONT groups of 4
+    # Pre-compute time windows for each group of 4 for efficient filtering
+    matches_by_date: Dict[str, List[Tuple[Match, Tuple[datetime, datetime]]]] = {}
+    for m in matches:
+        if not m.riders:
+            continue
+        # Only process ONT matches
+        if (m.riders[0].airport or "").upper() != "ONT":
+            continue
+        # Only groups of 4
+        if len(m.riders) != 4:
+            continue
+        date = m.riders[0].date
+        group_window = _group_time_window(m.riders)
+        matches_by_date.setdefault(date, []).append((m, group_window))
+    
+    # Work on copies
+    ms = list(matches)
+    remaining_unmatched = list(unmatched)
+    matched_flight_ids = {r.flight_id for m in ms for r in m.riders}
+    
+    # Track newly created matches for voucher assignment
+    newly_created_matches: List[Match] = []
+    
+    changed = True
+    while changed:
+        changed = False
+        
+        # Rebuild matches_by_date on each iteration (in case matches changed)
+        matches_by_date: Dict[str, List[Tuple[Match, Tuple[datetime, datetime]]]] = {}
+        for m in ms:
+            if not m.riders:
+                continue
+            # Only process ONT matches
+            if (m.riders[0].airport or "").upper() != "ONT":
+                continue
+            # Only groups of 4
+            if len(m.riders) != 4:
+                continue
+            date = m.riders[0].date
+            group_window = _group_time_window(m.riders)
+            matches_by_date.setdefault(date, []).append((m, group_window))
+        
+        # Rebuild unmatched_by_date (filter to only ONT and not yet matched)
+        unmatched_by_date: Dict[str, List[RiderLite]] = {}
+        for u in remaining_unmatched:
+            if (u.airport or "").upper() != "ONT":
+                continue
+            if u.flight_id in matched_flight_ids:
+                continue
+            unmatched_by_date.setdefault(u.date, []).append(u)
+        
+        # Process each date
+        for date, unmatched_riders in unmatched_by_date.items():
+            if date not in matches_by_date:
+                continue
+            
+            date_matches_with_windows = matches_by_date[date]
+            
+            # Try each unmatched rider
+            for unmatched_rider in list(unmatched_riders):  # Use list() to avoid modification during iteration
+                if unmatched_rider.flight_id in matched_flight_ids:
+                    continue
+                
+                # Pre-compute unmatched rider's time window
+                u_start = datetime.fromisoformat(f"{unmatched_rider.date}T{unmatched_rider.earliest_time}")
+                u_end = datetime.fromisoformat(f"{unmatched_rider.date}T{unmatched_rider.latest_time}")
+                if u_end < u_start:
+                    u_end += timedelta(days=1)
+                
+                # Try each group of 4 on this date
+                for match_4, (group_start, group_end) in date_matches_with_windows:
+                    if len(match_4.riders) != 4:
+                        continue
+                    
+                    # Quick overlap check: does unmatched rider's window overlap with group's window?
+                    latest_start = max(u_start, group_start)
+                    earliest_end = min(u_end, group_end)
+                    if latest_start >= earliest_end and not (config.ALLOW_TOUCHING and latest_start == earliest_end):
+                        continue  # No overlap, skip this group
+                    
+                    # Try removing each person from the group of 4
+                    for x_idx, X in enumerate(match_4.riders):
+                        # Quick check: does X's window overlap with unmatched rider's window?
+                        if not _time_windows_overlap(X, unmatched_rider):
+                            continue  # No overlap, skip this person
+                        
+                        # Create new groups: 3-person (remaining) and 2-person (X + unmatched)
+                        group_3 = [r for i, r in enumerate(match_4.riders) if i != x_idx]
+                        group_2 = [X, unmatched_rider]
+                        
+                        # Check time overlap for the new 2-person group (detailed check)
+                        eff_overlap = _effective_overlap_minutes(group_2)
+                        if eff_overlap < 0:
+                            continue  # No time overlap
+                        
+                        # Both groups must be valid
+                        if not _is_valid_group(group_3):
+                            continue
+                        if not _is_valid_group(group_2):
+                            continue
+                        
+                        # Safety check: ensure unmatched_rider isn't already matched elsewhere
+                        # Note: X.flight_id is already in matched_flight_ids (from match_4), 
+                        # but that's fine since we're replacing match_4 with match_3 and adding match_2
+                        if unmatched_rider.flight_id in matched_flight_ids:
+                            continue
+                        
+                        # Success: create new matches
+                        match_3 = _group_to_match(group_3, bucket_key=match_4.bucket_key)
+                        match_2 = _group_to_match(group_2, bucket_key=match_4.bucket_key)
+                        
+                        # Recalculate group_subsidy for both new matches
+                        thresholds = {"LAX": 3, "ONT": 2}
+                        for new_match in [match_3, match_2]:
+                            if not new_match.riders:
+                                new_match.group_subsidy = False
+                                continue
+                            
+                            group_airport = (new_match.riders[0].airport or "").strip().upper()
+                            need = thresholds.get(group_airport)
+                            group_size = len(new_match.riders)
+                            all_pomona = all((r.school or "").strip().upper() == "POMONA"
+                                           for r in new_match.riders)
+                            
+                            qualifies = (
+                                need is not None and
+                                group_size >= need and
+                                all_pomona
+                            )
+                            new_match.group_subsidy = qualifies
+                            
+                            # Set subsidized on riders to match the group
+                            for r in new_match.riders:
+                                r.subsidized = qualifies
+                            
+                            # Clear old vouchers - will be reassigned below
+                            new_match.group_voucher = None
+                            for r in new_match.riders:
+                                r.group_voucher = None
+                                r.contingency_voucher = None
+                        
+                        # Replace the 4-person group with the 3-person group in ms
+                        try:
+                            ms_idx = ms.index(match_4)
+                            ms[ms_idx] = match_3
+                        except ValueError:
+                            # Match not found (shouldn't happen, but handle gracefully)
+                            continue
+                        
+                        ms.append(match_2)
+                        
+                        # Track newly created matches for voucher assignment
+                        newly_created_matches.append(match_3)
+                        newly_created_matches.append(match_2)
+                        
+                        # Update matched_flight_ids
+                        matched_flight_ids.add(unmatched_rider.flight_id)
+                        matched_flight_ids.add(X.flight_id)
+                        
+                        # Remove from remaining_unmatched
+                        if unmatched_rider in remaining_unmatched:
+                            remaining_unmatched.remove(unmatched_rider)
+                        
+                        changed = True
+                        break  # Stop trying other X in this group
+                    
+                    if changed:
+                        break  # Stop trying other groups for this unmatched rider
+                
+                if changed:
+                    break  # Restart outer loop
+        
+        # If no changes, exit loop
+        if not changed:
+            break
+    
+    # Assign vouchers to newly created matches
+    if newly_created_matches and voucher_csv_path:
+        try:
+            # Import here to avoid circular imports
+            import shutil
+            from pathlib import Path
+
+            import vouchers
+
+            # Load voucher pool (same logic as assign_vouchers)
+            # IMPORTANT: For dry-run, reuse the same temp file from assign_vouchers to preserve USED flags
+            temp_file_path: Optional[str] = None
+            try:
+                if dry_run:
+                    # Dry run: ALWAYS reuse the temp file from assign_vouchers
+                    # assign_vouchers creates voucher_csv_path + ".dryrun.csv" with USED flags
+                    # We must reuse this same file to preserve those flags
+                    temp_path = voucher_csv_path + ".dryrun.csv"
+                    if not Path(temp_path).exists():
+                        # This shouldn't happen if assign_vouchers ran first, but handle gracefully
+                        print(f"Warning: Temp voucher file {temp_path} not found. Creating from original.")
+                        shutil.copyfile(voucher_csv_path, temp_path)
+                    # Always use the existing temp file (has USED flags from assign_vouchers)
+                    working_path = temp_path
+                else:
+                    # Real run: check if using Supabase Storage or local files
+                    if config.USE_SUPABASE_STORAGE:
+                        if sb is None:
+                            print("Warning: Supabase client not provided, skipping voucher assignment for new matches")
+                            return ms, remaining_unmatched
+                        
+                        # Download active.csv from Supabase Storage
+                        import storage
+                        temp_file_path = storage.download_file(
+                            sb, 
+                            config.STORAGE_VOUCHERS_BUCKET, 
+                            config.VOUCHERS_ACTIVE_FILE
+                        )
+                        working_path = temp_file_path
+                        
+                        if not Path(working_path).exists():
+                            print("Warning: Failed to download vouchers, skipping voucher assignment for new matches")
+                            return ms, remaining_unmatched
+                    else:
+                        # Use local file
+                        working_path = voucher_csv_path
+                
+                # Load voucher pool
+                df = vouchers.load_voucher_pool(working_path)
+                
+                # Assign vouchers to newly created matches (respect covered dates when COVERED_DATES_EXPLICIT)
+                for match in newly_created_matches:
+                    riders = match.riders
+                    if not riders:
+                        continue
+                    # Connect Shuttles do not get vouchers
+                    if getattr(match, "ride_type", None) == "Connect":
+                        match.group_voucher = None
+                        for r in riders:
+                            r.group_voucher = None
+                            r.contingency_voucher = None
+                        continue
+                    airport = (riders[0].airport or "").upper()
+                    ride_date = datetime.fromisoformat(match.suggested_time_iso).date()
+                    to_airport = riders[0].to_airport
+                    covered = vouchers.is_ride_date_covered(ride_date, to_airport)
+                    
+                    # --- GROUP VOUCHER ASSIGNMENT (if subsidized and covered) ---
+                    if getattr(match, "group_subsidy", False) and covered:
+                        idx = vouchers._find_group_voucher(df, airport, ride_date)
+                        if idx is not None:
+                            voucher = df.loc[idx, "voucher_link"]
+                            match.group_voucher = voucher
+                            for r in riders:
+                                r.group_voucher = voucher
+                            df.at[idx, "USED"] = True
+                        else:
+                            match.group_voucher = None
+                            for r in riders:
+                                r.group_voucher = None
+                    elif getattr(match, "group_subsidy", False):
+                        match.group_voucher = None
+                        for r in riders:
+                            r.group_voucher = None
+                    
+                    # --- CONTINGENCY VOUCHERS (inbound only, subsidized and covered) ---
+                    is_subsidized = getattr(match, "group_subsidy", False)
+                    if is_subsidized and covered:
+                        for r in riders:
+                            if not r.to_airport:  # inbound
+                                idx = vouchers._find_contingency_voucher(df, airport)
+                                if idx is not None:
+                                    voucher = df.loc[idx, "voucher_link"]
+                                    r.contingency_voucher = voucher
+                                    df.at[idx, "USED"] = True
+                                else:
+                                    r.contingency_voucher = None
+                            else:
+                                r.contingency_voucher = None
+                    else:
+                        for r in riders:
+                            r.contingency_voucher = None
+                
+                # Save updated vouchers
+                df.to_csv(working_path, index=False)
+                
+                # For real run: upload to Supabase Storage if using it
+                if not dry_run and config.USE_SUPABASE_STORAGE and sb is not None:
+                    import storage
+
+                    # Archive old active.csv
+                    storage.archive_file(
+                        sb,
+                        config.STORAGE_VOUCHERS_BUCKET,
+                        config.VOUCHERS_ACTIVE_FILE,
+                        config.VOUCHERS_ARCHIVE_FOLDER
+                    )
+                    # Upload updated active.csv
+                    storage.upload_file(
+                        sb,
+                        config.STORAGE_VOUCHERS_BUCKET,
+                        config.VOUCHERS_ACTIVE_FILE,
+                        working_path
+                    )
+                    print(f"Assigned vouchers to {len(newly_created_matches)} newly created matches")
+            finally:
+                # Clean up temp file if we created one for Supabase Storage
+                if temp_file_path and Path(temp_file_path).exists():
+                    Path(temp_file_path).unlink(missing_ok=True)
+        except Exception as e:
+            print(f"Warning: Failed to assign vouchers to newly created matches: {e}")
+            # Continue anyway - matches are still valid
+    
+    return ms, remaining_unmatched
+
+
 def _final_leftovers(
     matches: List[Match],
     leftovers: List[RiderLite],
@@ -927,12 +1364,190 @@ def _final_leftovers(
     return ms, remaining_leftovers
 
 
+def _is_lax_departures_bucket(bucket_key: Optional[str]) -> bool:
+    """True if this bucket is LAX departures (TO LAX)."""
+    if not bucket_key:
+        return False
+    return "LAX" in bucket_key and "TO" in bucket_key
+
+
+def _time_overlap_no_bags(members: List[RiderLite]) -> bool:
+    """True if all members have a common time overlap (no bag check). Uses same grace as normal matching."""
+    return _effective_overlap_minutes(members) >= 0
+
+
+def _largest_overlapping_set(riders: List[RiderLite]) -> List[RiderLite]:
+    """
+    Find a largest set of riders that share a common time overlap (no bags).
+    Uses sliding window: sort by start, then find largest [left, right] with min(ends) > start_right.
+    """
+    if not riders:
+        return []
+    riders_sorted = sorted(riders, key=lambda r: _interval(r)[0])
+    n = len(riders_sorted)
+    left = 0
+    best_size = 0
+    best_range = (0, -1)
+    heap: List[Tuple[datetime, int]] = []  # (end, idx)
+    for right in range(n):
+        s_r, e_r = _interval(riders_sorted[right])
+        heapq.heappush(heap, (e_r, right))
+        while heap and heap[0][1] < left:
+            heapq.heappop(heap)
+        while left <= right and heap and s_r >= heap[0][0]:
+            left += 1
+            while heap and heap[0][1] < left:
+                heapq.heappop(heap)
+        if left <= right:
+            size = right - left + 1
+            if size > best_size:
+                best_size = size
+                best_range = (left, right)
+    if best_size == 0:
+        return []
+    return riders_sorted[best_range[0] : best_range[1] + 1]
+
+
+def _expand_with_same_flight(core: List[RiderLite], date_riders: List[RiderLite]) -> List[RiderLite]:
+    """Expand core by adding all riders on the same date who share a flight with someone in core."""
+    core_flight_keys = set()
+    for r in core:
+        key = (r.airline_iata or "", r.flight_no, r.date)
+        core_flight_keys.add(key)
+    expanded = list(core)
+    added_ids = {id(r) for r in core}
+    for r in date_riders:
+        if id(r) in added_ids:
+            continue
+        key = (r.airline_iata or "", r.flight_no, r.date)
+        if key in core_flight_keys:
+            expanded.append(r)
+            added_ids.add(id(r))
+    return expanded
+
+
+def _form_connect_shuttle_groups(
+    pool: List[RiderLite],
+    bucket_key: Optional[str],
+) -> Tuple[List[Match], List[RiderLite]]:
+    """
+    Partition pool into Connect Shuttle groups (8-25 or 30-55). Prefer 30-55, then 8-25.
+    Returns (list of Connect Shuttle matches, remaining riders who didn't fit).
+    """
+    min_s = getattr(config, "LAX_CONNECT_SHUTTLE_MIN", 8)
+    t1_max = getattr(config, "LAX_CONNECT_SHUTTLE_TIER1_MAX", 25)
+    t2_min = getattr(config, "LAX_CONNECT_SHUTTLE_TIER2_MIN", 30)
+    t2_max = getattr(config, "LAX_CONNECT_SHUTTLE_TIER2_MAX", 55)
+    matches: List[Match] = []
+    remaining = list(pool)
+    # Prefer 30-55 groups first
+    while len(remaining) >= t2_min:
+        take = min(len(remaining), t2_max)
+        group = remaining[:take]
+        remaining = remaining[take:]
+        m = _group_to_match(group, bucket_key=bucket_key)
+        m.ride_type = "Connect"
+        matches.append(m)
+    # Then 8-25 groups
+    while len(remaining) >= min_s:
+        take = min(len(remaining), t1_max)
+        group = remaining[:take]
+        remaining = remaining[take:]
+        m = _group_to_match(group, bucket_key=bucket_key)
+        m.ride_type = "Connect"
+        matches.append(m)
+    return matches, remaining
+
+
+def _try_lax_connect_shuttles(
+    riders: List[RiderLite],
+    bucket_key: Optional[str],
+) -> Tuple[List[Match], List[RiderLite]]:
+    """
+    For LAX departures only: try to form Connect Shuttle groups (8-25 or 30-55).
+    Uses only time overlap (no bags). Expands with same-flight riders even if times don't align.
+    If we can form at least one group of min size, return those matches and remaining riders for normal matching.
+    If we can't form a group of 8+, return ([], riders) so caller runs normal matching on everyone.
+    """
+    if not _is_lax_departures_bucket(bucket_key):
+        return [], riders
+    min_s = getattr(config, "LAX_CONNECT_SHUTTLE_MIN", 8)
+    if len(riders) < min_s:
+        return [], riders
+
+    riders_by_date: Dict[str, List[RiderLite]] = {}
+    for r in riders:
+        riders_by_date.setdefault(r.date, []).append(r)
+
+    all_connect_matches: List[Match] = []
+    all_remaining: List[RiderLite] = []
+
+    for date, date_riders in riders_by_date.items():
+        if len(date_riders) < min_s:
+            all_remaining.extend(date_riders)
+            continue
+        core = _largest_overlapping_set(date_riders)
+        if len(core) < min_s:
+            all_remaining.extend(date_riders)
+            continue
+        pool = _expand_with_same_flight(core, date_riders)
+        connect_matches, remaining = _form_connect_shuttle_groups(pool, bucket_key)
+        if not connect_matches:
+            all_remaining.extend(date_riders)
+            continue
+        all_connect_matches.extend(connect_matches)
+        # Anyone in date_riders not in connect_matches and not in remaining goes to remaining
+        in_connect = {id(r) for m in connect_matches for r in m.riders}
+        in_remaining = {id(r) for r in remaining}
+        for r in date_riders:
+            if id(r) not in in_connect and id(r) not in in_remaining:
+                all_remaining.append(r)
+        all_remaining.extend(remaining)
+
+    if not all_connect_matches:
+        return [], riders
+    return all_connect_matches, all_remaining
+
+
 # perform matching inside a single bucket
-def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> Tuple[List[Match], List[RiderLite], dict]:
+def match_bucket(
+    riders: List[RiderLite],
+    bucket_key: Optional[str] = None,
+    final_pass: bool = False,
+) -> Tuple[List[Match], List[RiderLite], dict]:
+    """
+    When final_pass=True (e.g. LAX final retry), allow groups of 3 with max 12 bags (Uber XXL)
+    and relaxed large-bag limit so more riders can be matched.
+    """
+    global _final_pass_group3_rules
+    if final_pass:
+        _final_pass_group3_rules = True
+        setattr(config, "FINAL_PASS_PAIR_BAG_LIMIT", 12)
+    try:
+        return _match_bucket_impl(riders, bucket_key)
+    finally:
+        if final_pass:
+            _final_pass_group3_rules = False
+            if hasattr(config, "FINAL_PASS_PAIR_BAG_LIMIT"):
+                delattr(config, "FINAL_PASS_PAIR_BAG_LIMIT")
+
+
+def _match_bucket_impl(riders: List[RiderLite], bucket_key: Optional[str] = None) -> Tuple[List[Match], List[RiderLite], dict]:
     if len(riders) < 2:
         # singleton buckets
         diag = {r.flight_id: {"bucket_key": bucket_key or "", "reason": "singleton_bucket", "details": {}} for r in riders}
         return [], list(riders), diag
+
+    # LAX departures only: try Connect Shuttles (8-25 or 30-55) first; if we form any, run normal matching on the rest
+    connect_matches, riders_for_normal = _try_lax_connect_shuttles(riders, bucket_key)
+    if connect_matches:
+        riders = riders_for_normal
+        if len(riders) < 2:
+            diag = {r.flight_id: {"bucket_key": bucket_key or "", "reason": "singleton_bucket", "details": {}} for r in riders} if riders else {}
+            return connect_matches, list(riders), diag
+        # Continue with normal matching on remaining riders; we'll merge connect_matches at the end
+    else:
+        riders = list(riders)
 
     # Sort riders by time window constraint (most constrained first = shortest windows first)
     # This improves greedy matching by prioritizing hard-to-match riders
@@ -949,7 +1564,7 @@ def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> T
     if not pairs:
         diag = {r.flight_id: {"bucket_key": bucket_key or "", "reason": audit._top_reason(pair_diag.get(i, {})), "details": pair_diag.get(i, {})}
                 for i, r in enumerate(riders)}
-        return [], list(riders), diag
+        return (connect_matches or []) + [], list(riders), diag
 
     idx_pairs = _select_pairs(pairs)
     used = set()
@@ -1005,4 +1620,7 @@ def match_bucket(riders: List[RiderLite], bucket_key: Optional[str] = None) -> T
 
     # compose diagnostics for leftovers
     diag = audit.finalize_unmatched_diag(riders, bucket_key, pairs, pair_diag, feasible_count, used)
+    # Prepend LAX Connect Shuttle matches if we formed any
+    if connect_matches:
+        matches = connect_matches + matches
     return matches, leftovers, diag
