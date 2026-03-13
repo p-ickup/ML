@@ -28,6 +28,15 @@ def _bags_for_constrained(r: RiderLite) -> int:
         total += int(r.bag_no_personal or 0)
     return total
 
+def _are_same_flight_pair(a: RiderLite, b: RiderLite) -> bool:
+    """True if both riders are on the same flight (airline_iata + flight_no + date)."""
+    if a.flight_no is None or b.flight_no is None:
+        return False
+    key_a = ((a.airline_iata or "").upper(), a.flight_no, a.date)
+    key_b = ((b.airline_iata or "").upper(), b.flight_no, b.date)
+    return key_a == key_b
+
+
 # reason for blocking a PAIR (None => feasible)
 def pair_block_reason(a: RiderLite, b: RiderLite) -> Optional[str]:
     a0, a1 = _interval(a); b0, b1 = _interval(b)
@@ -41,6 +50,8 @@ def pair_block_reason(a: RiderLite, b: RiderLite) -> Optional[str]:
     if overlap_min < 0:
         if config.ALLOW_TOUCHING and (-overlap_min) <= config.OVERLAP_GRACE_MIN:
             pass  # allow as feasible
+        elif getattr(config, "SAME_FLIGHT_PRIORITY", False) and _are_same_flight_pair(a, b) and (-overlap_min) <= 60:
+            pass  # same flight + date: allow up to 60 min gap so they can be scored and matched
         else:
             return "no_time_overlap"
 

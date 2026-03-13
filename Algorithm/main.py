@@ -18,7 +18,7 @@ import storage
 from buckets import bucket_names, make_buckets
 from dotenv import load_dotenv
 from rider_data import RiderData, RiderLite
-from ruleMatching import Match, _ont_post_process_unmatched, match_bucket
+from ruleMatching import Match, _ont_post_process_unmatched, match_bucket, merge_groups_into_connect_shuttles
 from supabase import Client, create_client
 
 from vouchers import assign_vouchers, is_ride_date_covered
@@ -399,6 +399,12 @@ def _write_matches_db(sb: Client, matches: List[Match], all_riders: List[RiderLi
         group_size = len(m.riders)
         uber_type = getattr(m, "ride_type", None) or _determine_uber_type(group_size, bag_units)
 
+        # Rides with uncovered dates must not be written as subsidized (enforce at persist time)
+        ride_date_for_cover = datetime.fromisoformat(m.suggested_time_iso).date()
+        to_airport = m.riders[0].to_airport
+        covered = is_ride_date_covered(ride_date_for_cover, to_airport)
+        write_subsidized = bool(getattr(m, "group_subsidy", False) and covered)
+
         # Calculate group time window (earliest_time and latest_time across all riders)
         # Use shared helper function to ensure consistency with CSV output
         group_earliest_time, group_latest_time = _compute_group_time_window(m.riders)
@@ -410,7 +416,7 @@ def _write_matches_db(sb: Client, matches: List[Match], all_riders: List[RiderLi
             continue
         ride_id = ride_resp.data[0]["ride_id"]
 
-        # 2) insert each member with SAME ride_id into Matches (include date/time and voucher_given)
+        # 2) insert each member with SAME ride_id into Matches (is_subsidized only if covered)
         rows = []
         flight_ids = []
         for r in m.riders:
@@ -426,7 +432,7 @@ def _write_matches_db(sb: Client, matches: List[Match], all_riders: List[RiderLi
                 "voucher": getattr(r, "group_voucher", ""),
                 "contingency_voucher": getattr(r, "contingency_voucher", None),
                 "is_verified": False,
-                "is_subsidized": r.subsidized,
+                "is_subsidized": write_subsidized,   # false if ride date not covered
                 "uber_type": uber_type,           # same for all riders in the group
             })
             flight_ids.append(r.flight_id)
@@ -434,9 +440,9 @@ def _write_matches_db(sb: Client, matches: List[Match], all_riders: List[RiderLi
         if rows:
             sb.table("Matches").insert(rows).execute()
 
-        # 3) mark all flights in the group as matched
+        # 3) mark all flights in the group as matched; original_unmatched = False (was matched this run)
         if flight_ids:
-            sb.table("Flights").update({"matched": True}).in_("flight_id", flight_ids).execute()
+            sb.table("Flights").update({"matched": True, "original_unmatched": False}).in_("flight_id", flight_ids).execute()
 
     considered_ids = {r.flight_id for r in all_riders}
 
@@ -449,11 +455,11 @@ def _write_matches_db(sb: Client, matches: List[Match], all_riders: List[RiderLi
     unmatched_ids = list(considered_ids - matched_ids)
 
     if unmatched_ids:
-        sb.table("Flights").update({"matched": False}).in_("flight_id", unmatched_ids).execute()
+        sb.table("Flights").update({"matched": False, "original_unmatched": True}).in_("flight_id", unmatched_ids).execute()
 
     print(
-        f"Wrote {len(matches)} groups to Supabase and updated Flights.matched. "
-        f"Marked {len(matched_ids)} matched=True and {len(unmatched_ids)} matched=False."
+        f"Wrote {len(matches)} groups to Supabase and updated Flights.matched / original_unmatched. "
+        f"Marked {len(matched_ids)} matched=True (original_unmatched=False) and {len(unmatched_ids)} matched=False (original_unmatched=True)."
     )
 
 
@@ -631,6 +637,10 @@ def run(
         # Final LAX retry when Connect Shuttle is on: re-run matching on LAX unmatched (e.g. 3 with exact overlap)
         if getattr(config, "LAX_CONNECT_SHUTTLE_MIN", None) is not None:
             all_matches, all_unmatched = _final_lax_unmatched_retry(all_matches, all_unmatched)
+
+        # After all matches: try to merge LAX departure groups with overlapping times into Connect shuttles
+        if getattr(config, "LAX_CONNECT_SHUTTLE_MIN", None) is not None:
+            all_matches = merge_groups_into_connect_shuttles(all_matches)
         
         # report summary
         print(f"Buckets: {len(buckets)} | Groups: {len(all_matches)} | Unmatched: {len(all_unmatched)}")
