@@ -1,2 +1,7 @@
 #ignore 
 .env
+
+/matches
+/vouchers
+
+/Archive

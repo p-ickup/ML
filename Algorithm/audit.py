@@ -16,7 +16,26 @@ def _interval(r: RiderLite) -> Tuple[datetime, datetime]:
 
 # bags for rider
 def _bags_for(r: RiderLite) -> int:
-    return int(r.bags_no or 0) + int(r.bags_no_large or 0)
+    return int(r.bags_no or 0) + int(r.bags_no_large or 0) + int(r.bag_no_personal or 0)
+
+# constrained bags for rider (excludes personal if PERSONAL_CONSTRAINT is False)
+# Large bags count as LARGE_BAG_MULTIPLIER in the total (but still count as 1 for MAX_LARGE_BAGS constraint)
+def _bags_for_constrained(r: RiderLite) -> int:
+    large_bags = int(r.bags_no_large or 0)
+    normal_bags = int(r.bags_no or 0)
+    total = (large_bags * config.LARGE_BAG_MULTIPLIER) + normal_bags
+    if config.PERSONAL_CONSTRAINT:
+        total += int(r.bag_no_personal or 0)
+    return total
+
+def _are_same_flight_pair(a: RiderLite, b: RiderLite) -> bool:
+    """True if both riders are on the same flight (airline_iata + flight_no + date)."""
+    if a.flight_no is None or b.flight_no is None:
+        return False
+    key_a = ((a.airline_iata or "").upper(), a.flight_no, a.date)
+    key_b = ((b.airline_iata or "").upper(), b.flight_no, b.date)
+    return key_a == key_b
+
 
 # reason for blocking a PAIR (None => feasible)
 def pair_block_reason(a: RiderLite, b: RiderLite) -> Optional[str]:
@@ -31,11 +50,17 @@ def pair_block_reason(a: RiderLite, b: RiderLite) -> Optional[str]:
     if overlap_min < 0:
         if config.ALLOW_TOUCHING and (-overlap_min) <= config.OVERLAP_GRACE_MIN:
             pass  # allow as feasible
+        elif getattr(config, "SAME_FLIGHT_PRIORITY", False) and _are_same_flight_pair(a, b) and (-overlap_min) <= 60:
+            pass  # same flight + date: allow up to 60 min gap so they can be scored and matched
         else:
             return "no_time_overlap"
 
-    # bag capacity for a pair
-    if (_bags_for(a) + _bags_for(b)) > config.NUM_BAGS:
+    # bag capacity for a pair (respects PERSONAL_CONSTRAINT setting)
+    # Final pass can set FINAL_PASS_PAIR_BAG_LIMIT so pairs that form group-of-3 with 12 bags are allowed
+    pair_limit = getattr(config, "FINAL_PASS_PAIR_BAG_LIMIT", None)
+    if pair_limit is None:
+        pair_limit = config.MAX_TOTAL_BAGS
+    if (_bags_for_constrained(a) + _bags_for_constrained(b)) > pair_limit:
         return "bag_capacity"
 
     # terminal (strict)
