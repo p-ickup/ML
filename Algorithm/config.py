@@ -22,7 +22,7 @@ ALLOW_TOUCHING = True   # if True, 0-minute/touching windows are allowed (via gr
 TOUCH_FLOOR_MIN = 3       # e.g., give 3 "virtual" minutes for score if overlap is 0
 
 # Local improvement pass (absorb leftovers into groups if it helps)
-LOCAL_IMPROVE_PASSES = 1  # number of sweeps over leftovers
+LOCAL_IMPROVE_PASSES = 2  # number of sweeps over leftovers
 LOCAL_IMPROVE_TOL = 0.0   # require >= this improvement in group score to add a rider
 
 # Enable optional split of a 4-person group into (3,2) if it rescues a leftover
@@ -38,7 +38,7 @@ PREFER_SUBSIDIZED = False  # set True to prioritize subsidized groups
 SAME_FLIGHT_PRIORITY = True  # set True to prioritize same-flight matches
 
 # LAX Connect Shuttles (departures only: TO LAX). Group sizes 8-25 or 30-55; no bag consideration when forming.
-LAX_CONNECT_SHUTTLE_MIN = 8
+LAX_CONNECT_SHUTTLE_MIN = 7
 LAX_CONNECT_SHUTTLE_TIER1_MAX = 25   # first tier: 8-25 people
 LAX_CONNECT_SHUTTLE_TIER2_MIN = 30
 LAX_CONNECT_SHUTTLE_TIER2_MAX = 55   # second tier: 30-55 people
@@ -61,7 +61,7 @@ COMPATIBLE_SCHOOLS = {
 # Dates as MM-DD (year-agnostic).
 COVERED_DATES_EXPLICIT = True
 # Spring Break example:
-COVERED_DATES_OUTBOUND = ["03-13", "03-14", "03-15"]   # March 13, 14, 15
+COVERED_DATES_OUTBOUND = ["05-12", "05-13", "05-14", "05-15", "05-16", "05-17", "05-18", "05-19"]   # May 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30
 COVERED_DATES_INBOUND = ["03-20", "03-21", "03-22"]    # March 20, 21, 22
 
 # Supabase Storage Configuration
