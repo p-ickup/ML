@@ -96,13 +96,6 @@ def _effective_overlap_minutes(members: List[RiderLite]) -> int:
     if config.ALLOW_TOUCHING and (-overlap_min) <= config.OVERLAP_GRACE_MIN:
         return 0
     
-    # If SAME_FLIGHT_PRIORITY is enabled and all members are on the same flight,
-    # allow larger negative overlaps (up to a generous grace period)
-    if config.SAME_FLIGHT_PRIORITY and _are_same_flight(members):
-        # Allow up to 60 minutes of negative overlap for same-flight matches
-        if (-overlap_min) <= 60:
-            return 0  # Treat as zero overlap (touching)
-    
     return -1  # signals no feasible overlap even with grace
 
 
@@ -143,12 +136,7 @@ def _is_valid_group(members: List[RiderLite]) -> bool:
 
     eff_min = _effective_overlap_minutes(members)
     if eff_min < 0:  # truly no overlap even with grace
-        # Exception: if SAME_FLIGHT_PRIORITY is enabled and all members are on same flight,
-        # allow the match even with poor overlap (effective_overlap_minutes will return 0 for same-flight)
-        if config.SAME_FLIGHT_PRIORITY and _are_same_flight(members):
-            pass  # Allow same-flight matches even with poor overlap
-        else:
-            return False
+        return False
 
     # BAG CAPACITY RULES (configurable)
     total_large, total_normal, total_personal, total_all = _bags_totals(members)
@@ -373,19 +361,13 @@ def _score_group(members: List[RiderLite], validate: bool = False) -> float:
 
     eff_min = _effective_overlap_minutes(members)
     
-    # If SAME_FLIGHT_PRIORITY is enabled and all members are on same flight,
-    # allow scoring even with negative overlap (it will be treated as 0)
     is_same_flight = config.SAME_FLIGHT_PRIORITY and _are_same_flight(members)
     
-    if eff_min < 0 and not is_same_flight:
+    if eff_min < 0:
         return float("-inf")
 
     # touching → give a tiny floor so they're not always siphoned away
-    # For same-flight matches with poor overlap, use floor value
-    if is_same_flight and eff_min < 0:
-        time_fit_min = config.TOUCH_FLOOR_MIN
-    else:
-        time_fit_min = eff_min if eff_min > 0 else config.TOUCH_FLOOR_MIN
+    time_fit_min = eff_min if eff_min > 0 else config.TOUCH_FLOOR_MIN
 
     tpen = _terminal_penalty(members)
     _, _, _, total_all = _bags_totals(members)
@@ -413,7 +395,7 @@ def _score_group(members: List[RiderLite], validate: bool = False) -> float:
         
         if config.SAME_FLIGHT_PRIORITY and is_same_flight:
             # Massive bonus for same-flight matches when priority mode is enabled
-            # This ensures same-flight matches are prioritized even with poor time overlap
+            # This ensures same-flight matches are prioritized among valid time overlaps
             # Bonus scales with group size: 2 riders = 1000, 3 riders = 2000, 4 riders = 3000, etc.
             same_flight_bonus = (max_same_flight - 1) * 1000.0 if max_same_flight > 1 else 0.0
         else:
@@ -893,9 +875,6 @@ def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) ->
 def _ont_post_process_unmatched(
     matches: List[Match],
     unmatched: List[RiderLite],
-    voucher_csv_path: Optional[str] = None,
-    dry_run: bool = False,
-    sb: Optional[object] = None
 ) -> Tuple[List[Match], List[RiderLite]]:
     """
     Post-processing for ONT unmatched individuals:
@@ -970,9 +949,6 @@ def _ont_post_process_unmatched(
     ms = list(matches)
     remaining_unmatched = list(unmatched)
     matched_flight_ids = {r.flight_id for m in ms for r in m.riders}
-    
-    # Track newly created matches for voucher assignment
-    newly_created_matches: List[Match] = []
     
     changed = True
     while changed:
@@ -1061,36 +1037,7 @@ def _ont_post_process_unmatched(
                         # Success: create new matches
                         match_3 = _group_to_match(group_3, bucket_key=match_4.bucket_key)
                         match_2 = _group_to_match(group_2, bucket_key=match_4.bucket_key)
-                        
-                        # Recalculate group_subsidy for both new matches
-                        thresholds = {"LAX": 3, "ONT": 2}
-                        for new_match in [match_3, match_2]:
-                            if not new_match.riders:
-                                new_match.group_subsidy = False
-                                continue
-                            
-                            group_airport = (new_match.riders[0].airport or "").strip().upper()
-                            need = thresholds.get(group_airport)
-                            group_size = len(new_match.riders)
-                            all_pomona = all((r.school or "").strip().upper() == "POMONA"
-                                           for r in new_match.riders)
-                            
-                            qualifies = (
-                                need is not None and
-                                group_size >= need and
-                                all_pomona
-                            )
-                            new_match.group_subsidy = qualifies
-                            
-                            # Set subsidized on riders to match the group
-                            for r in new_match.riders:
-                                r.subsidized = qualifies
-                            
-                            # Clear old vouchers - will be reassigned below
-                            new_match.group_voucher = None
-                            for r in new_match.riders:
-                                r.group_voucher = None
-                                r.contingency_voucher = None
+                        # group_subsidy / vouchers: main.run applies after all post-processing
                         
                         # Replace the 4-person group with the 3-person group in ms
                         try:
@@ -1101,10 +1048,6 @@ def _ont_post_process_unmatched(
                             continue
                         
                         ms.append(match_2)
-                        
-                        # Track newly created matches for voucher assignment
-                        newly_created_matches.append(match_3)
-                        newly_created_matches.append(match_2)
                         
                         # Update matched_flight_ids
                         matched_flight_ids.add(unmatched_rider.flight_id)
@@ -1126,139 +1069,6 @@ def _ont_post_process_unmatched(
         # If no changes, exit loop
         if not changed:
             break
-    
-    # Assign vouchers to newly created matches
-    if newly_created_matches and voucher_csv_path:
-        try:
-            # Import here to avoid circular imports
-            import shutil
-            from pathlib import Path
-
-            import vouchers
-
-            # Load voucher pool (same logic as assign_vouchers)
-            # IMPORTANT: For dry-run, reuse the same temp file from assign_vouchers to preserve USED flags
-            temp_file_path: Optional[str] = None
-            try:
-                if dry_run:
-                    # Dry run: ALWAYS reuse the temp file from assign_vouchers
-                    # assign_vouchers creates voucher_csv_path + ".dryrun.csv" with USED flags
-                    # We must reuse this same file to preserve those flags
-                    temp_path = voucher_csv_path + ".dryrun.csv"
-                    if not Path(temp_path).exists():
-                        # This shouldn't happen if assign_vouchers ran first, but handle gracefully
-                        print(f"Warning: Temp voucher file {temp_path} not found. Creating from original.")
-                        shutil.copyfile(voucher_csv_path, temp_path)
-                    # Always use the existing temp file (has USED flags from assign_vouchers)
-                    working_path = temp_path
-                else:
-                    # Real run: check if using Supabase Storage or local files
-                    if config.USE_SUPABASE_STORAGE:
-                        if sb is None:
-                            print("Warning: Supabase client not provided, skipping voucher assignment for new matches")
-                            return ms, remaining_unmatched
-                        
-                        # Download active.csv from Supabase Storage
-                        import storage
-                        temp_file_path = storage.download_file(
-                            sb, 
-                            config.STORAGE_VOUCHERS_BUCKET, 
-                            config.VOUCHERS_ACTIVE_FILE
-                        )
-                        working_path = temp_file_path
-                        
-                        if not Path(working_path).exists():
-                            print("Warning: Failed to download vouchers, skipping voucher assignment for new matches")
-                            return ms, remaining_unmatched
-                    else:
-                        # Use local file
-                        working_path = voucher_csv_path
-                
-                # Load voucher pool
-                df = vouchers.load_voucher_pool(working_path)
-                
-                # Assign vouchers to newly created matches (respect covered dates when COVERED_DATES_EXPLICIT)
-                for match in newly_created_matches:
-                    riders = match.riders
-                    if not riders:
-                        continue
-                    # Connect Shuttles do not get vouchers
-                    if getattr(match, "ride_type", None) == "Connect":
-                        match.group_voucher = None
-                        for r in riders:
-                            r.group_voucher = None
-                            r.contingency_voucher = None
-                        continue
-                    airport = (riders[0].airport or "").upper()
-                    ride_date = datetime.fromisoformat(match.suggested_time_iso).date()
-                    to_airport = riders[0].to_airport
-                    covered = vouchers.is_ride_date_covered(ride_date, to_airport)
-                    
-                    # --- GROUP VOUCHER ASSIGNMENT (if subsidized and covered) ---
-                    if getattr(match, "group_subsidy", False) and covered:
-                        idx = vouchers._find_group_voucher(df, airport, ride_date)
-                        if idx is not None:
-                            voucher = df.loc[idx, "voucher_link"]
-                            match.group_voucher = voucher
-                            for r in riders:
-                                r.group_voucher = voucher
-                            df.at[idx, "USED"] = True
-                        else:
-                            match.group_voucher = None
-                            for r in riders:
-                                r.group_voucher = None
-                    elif getattr(match, "group_subsidy", False):
-                        match.group_voucher = None
-                        for r in riders:
-                            r.group_voucher = None
-                    
-                    # --- CONTINGENCY VOUCHERS (inbound only, subsidized and covered) ---
-                    is_subsidized = getattr(match, "group_subsidy", False)
-                    if is_subsidized and covered:
-                        for r in riders:
-                            if not r.to_airport:  # inbound
-                                idx = vouchers._find_contingency_voucher(df, airport)
-                                if idx is not None:
-                                    voucher = df.loc[idx, "voucher_link"]
-                                    r.contingency_voucher = voucher
-                                    df.at[idx, "USED"] = True
-                                else:
-                                    r.contingency_voucher = None
-                            else:
-                                r.contingency_voucher = None
-                    else:
-                        for r in riders:
-                            r.contingency_voucher = None
-                
-                # Save updated vouchers
-                df.to_csv(working_path, index=False)
-                
-                # For real run: upload to Supabase Storage if using it
-                if not dry_run and config.USE_SUPABASE_STORAGE and sb is not None:
-                    import storage
-
-                    # Archive old active.csv
-                    storage.archive_file(
-                        sb,
-                        config.STORAGE_VOUCHERS_BUCKET,
-                        config.VOUCHERS_ACTIVE_FILE,
-                        config.VOUCHERS_ARCHIVE_FOLDER
-                    )
-                    # Upload updated active.csv
-                    storage.upload_file(
-                        sb,
-                        config.STORAGE_VOUCHERS_BUCKET,
-                        config.VOUCHERS_ACTIVE_FILE,
-                        working_path
-                    )
-                    print(f"Assigned vouchers to {len(newly_created_matches)} newly created matches")
-            finally:
-                # Clean up temp file if we created one for Supabase Storage
-                if temp_file_path and Path(temp_file_path).exists():
-                    Path(temp_file_path).unlink(missing_ok=True)
-        except Exception as e:
-            print(f"Warning: Failed to assign vouchers to newly created matches: {e}")
-            # Continue anyway - matches are still valid
     
     return ms, remaining_unmatched
 

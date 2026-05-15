@@ -35,13 +35,30 @@ def _parse_month_day(s: str, year: int):
     return datetime.strptime(f"{s} {year}", "%B %d %Y").date()
 
 
+def _parse_csv_bool(val) -> bool:
+    """
+    Safe CSV boolean parse. pd.Series.astype(bool) maps string 'False' to True
+    (non-empty strings are truthy), which breaks the USED column.
+    """
+    if val is True or val is False:
+        return val
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return False
+    s = str(val).strip().lower()
+    if s in ("true", "1", "yes", "t"):
+        return True
+    if s in ("false", "0", "no", "f", ""):
+        return False
+    return False
+
+
 def load_voucher_pool(csv_path: str) -> pd.DataFrame:
     # load voucher CSV and normalize columns
     df = pd.read_csv(csv_path)
 
-    df["Contingency"] = df["Contingency"].astype(bool)
-    df["TO_AIRPORT"] = df["TO_AIRPORT"].astype(bool)
-    df["USED"] = df["USED"].astype(bool)
+    df["Contingency"] = df["Contingency"].map(_parse_csv_bool)
+    df["TO_AIRPORT"] = df["TO_AIRPORT"].map(_parse_csv_bool)
+    df["USED"] = df["USED"].map(_parse_csv_bool)
     df["AIRPORT"] = df["AIRPORT"].str.upper().str.strip()
 
     # parse date ranges into date objects
@@ -54,9 +71,9 @@ def load_voucher_pool(csv_path: str) -> pd.DataFrame:
 
 def _find_group_voucher(df, airport, ride_date):
     candidates = df[
-        (df["USED"] == False) &
+        (~df["USED"]) &
         (df["AIRPORT"] == airport) &
-        (df["Contingency"] == False) &
+        (~df["Contingency"]) &
         (df["start_date"] <= ride_date) &
         (df["end_date"] >= ride_date)
     ]
@@ -66,12 +83,18 @@ def _find_group_voucher(df, airport, ride_date):
 
 
 
-def _find_contingency_voucher(df, airport):
-    # find an unused contingency voucher for the airport
+def _find_contingency_voucher(df, airport, ride_date: date):
+    """
+    Unused contingency voucher for airport whose date range contains ride_date.
+    ride_date must be the group's scheduled ride date (from match.suggested_time_iso),
+    not individual form windows — same semantics as group vouchers.
+    """
     candidates = df[
-        (df["USED"] == False) &
+        (~df["USED"]) &
         (df["AIRPORT"] == airport) &
-        (df["Contingency"] == True)
+        (df["Contingency"]) &
+        (df["start_date"] <= ride_date) &
+        (df["end_date"] >= ride_date)
     ]
     if candidates.empty:
         return None
@@ -135,6 +158,14 @@ def assign_vouchers(
         # Load voucher pool
         df = load_voucher_pool(working_path)
 
+        # Clear all voucher fields first so final state matches current groups only
+        # (e.g. after Connect merge or any in-memory reuse).
+        for match in matches:
+            match.group_voucher = None
+            for r in match.riders or []:
+                r.group_voucher = None
+                r.contingency_voucher = None
+
         # Assign vouchers to matches
         for match in matches:
             riders = match.riders
@@ -175,7 +206,7 @@ def assign_vouchers(
             if is_subsidized and covered:
                 for r in riders:
                     if not r.to_airport:  # inbound
-                        idx = _find_contingency_voucher(df, airport)
+                        idx = _find_contingency_voucher(df, airport, ride_date)
                         if idx is not None:
                             voucher = df.loc[idx, "voucher_link"]
                             r.contingency_voucher = voucher

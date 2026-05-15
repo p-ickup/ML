@@ -67,20 +67,33 @@ class RiderData:
         self.sb = sb
         self.riders: List[RiderLite] = []
 
-    #fetch future flights within a max horizon (default 10 days)
-    def fetch_flights(self, max_days_ahead: Optional[int] = 10) -> List[dict]:
+    # fetch future flights within an optional [min, max] day offset from today (inclusive of flight dates)
+    def fetch_flights(
+        self,
+        max_days_ahead: Optional[int] = 10,
+        min_days_ahead: Optional[int] = None,
+    ) -> List[dict]:
         today = datetime.today().date()
+        if min_days_ahead is not None and max_days_ahead is not None and min_days_ahead > max_days_ahead:
+            raise ValueError(
+                f"min_days_ahead ({min_days_ahead}) cannot exceed max_days_ahead ({max_days_ahead})"
+            )
+
         q = (
             self.sb.table("Flights")
             .select(
                 "flight_id,user_id,flight_no,airline_iata,earliest_time,latest_time,"
                 "airport,date,to_airport,terminal,matched,bag_no,bag_no_large,bag_no_personal"
             )
-            .gt("date", today.isoformat())
             .is_("matched", None)
             .order("date", desc=False)
             .order("earliest_time", desc=False)
         )
+        if min_days_ahead is None:
+            q = q.gt("date", today.isoformat())
+        else:
+            start_date = (today + timedelta(days=min_days_ahead)).isoformat()
+            q = q.gte("date", start_date)
 
         if max_days_ahead is not None:
             end_date = (today + timedelta(days=max_days_ahead)).isoformat()
@@ -116,8 +129,14 @@ class RiderData:
         return result
 
     # build RiderLite objects from flights + schools (normalized airport + terminal)
-    def fetch_riders(self, max_days_ahead: Optional[int] = 10) -> List[RiderLite]:
-        flights = self.fetch_flights(max_days_ahead=max_days_ahead)
+    def fetch_riders(
+        self,
+        max_days_ahead: Optional[int] = 10,
+        min_days_ahead: Optional[int] = None,
+    ) -> List[RiderLite]:
+        flights = self.fetch_flights(
+            max_days_ahead=max_days_ahead, min_days_ahead=min_days_ahead
+        )
         uid_list = [f["user_id"] for f in flights if f.get("user_id")]
         user_info_by_uid = self.fetch_users(uid_list)
         riders: List[RiderLite] = []

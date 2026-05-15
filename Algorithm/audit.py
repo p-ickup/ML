@@ -50,8 +50,6 @@ def pair_block_reason(a: RiderLite, b: RiderLite) -> Optional[str]:
     if overlap_min < 0:
         if config.ALLOW_TOUCHING and (-overlap_min) <= config.OVERLAP_GRACE_MIN:
             pass  # allow as feasible
-        elif getattr(config, "SAME_FLIGHT_PRIORITY", False) and _are_same_flight_pair(a, b) and (-overlap_min) <= 60:
-            pass  # same flight + date: allow up to 60 min gap so they can be scored and matched
         else:
             return "no_time_overlap"
 

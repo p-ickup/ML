@@ -256,6 +256,14 @@ def _write_matches_csv(
             "uber_type": uber_type
         })
 
+    rows.sort(key=lambda row: (
+        row.get("date") or "",
+        row.get("suggested_time") or row.get("earliest_time") or "",
+        row.get("bucket_key") or "",
+    ))
+    for idx, row in enumerate(rows, start=1):
+        row["ride_id_simulated"] = idx
+
     fieldnames = list(rows[0].keys())
     
     # Write to local file first (for both dry-run and real runs)
@@ -318,6 +326,14 @@ def _write_unmatched_with_reasons(
     if not rows:
         print("No unmatched riders to write.")
         return
+
+    rows.sort(key=lambda row: (
+        row.get("date") or "",
+        row.get("earliest_time") or "",
+        row.get("latest_time") or "",
+        row.get("airport") or "",
+        row.get("name") or "",
+    ))
     
     # Write to local file first
     with open(csv_path, "w", newline="") as f:
@@ -542,6 +558,7 @@ def run(
     csv_path: str = "../matches/matches_dryrun.csv",
     unmatched_csv_path: str = "../matches/unmatched_reasons_dryrun.csv",
     days_ahead: int = 10,
+    days_ahead_start: Optional[int] = None,
     vouchers_csv_path: str = "../vouchers/Thanksgiving.csv"
 ) -> None:
     # AlgorithmStatus tracking (only for non-dry-run executions)
@@ -551,7 +568,9 @@ def run(
     
     try:
         rd = RiderData(supabase)
-        riders = rd.fetch_riders(max_days_ahead=days_ahead)
+        riders = rd.fetch_riders(
+            max_days_ahead=days_ahead, min_days_ahead=days_ahead_start
+        )
         
         # Set up AlgorithmStatus tracking (only for non-dry-run executions)
         if not dry_run:
@@ -611,28 +630,8 @@ def run(
             all_unmatched.extend(leftovers)
             all_diag.update(diag)
             
-        # group subsidiy
-        apply_group_subsidy(
-            all_matches,
-            thresholds={"LAX": 3, "ONT": 2}
-        )
-
-        # Assign vouchers (uses Supabase Storage if enabled, otherwise local files)
-        assign_vouchers(
-            all_matches, 
-            voucher_csv_path=vouchers_csv_path, 
-            dry_run=dry_run,
-            sb=supabase if (not dry_run and config.USE_SUPABASE_STORAGE) else None
-        )
-
         # ONT post-processing: Try to match unmatched individuals with groups of 4 on same day
-        all_matches, all_unmatched = _ont_post_process_unmatched(
-            all_matches, 
-            all_unmatched,
-            voucher_csv_path=vouchers_csv_path,
-            dry_run=dry_run,
-            sb=supabase if (not dry_run and config.USE_SUPABASE_STORAGE) else None
-        )
+        all_matches, all_unmatched = _ont_post_process_unmatched(all_matches, all_unmatched)
 
         # Final LAX retry when Connect Shuttle is on: re-run matching on LAX unmatched (e.g. 3 with exact overlap)
         if getattr(config, "LAX_CONNECT_SHUTTLE_MIN", None) is not None:
@@ -641,6 +640,18 @@ def run(
         # After all matches: try to merge LAX departure groups with overlapping times into Connect shuttles
         if getattr(config, "LAX_CONNECT_SHUTTLE_MIN", None) is not None:
             all_matches = merge_groups_into_connect_shuttles(all_matches)
+
+        # Subsidy + vouchers once the final group list is known (ONT splits, LAX retry, Connect merge)
+        apply_group_subsidy(
+            all_matches,
+            thresholds={"LAX": 3, "ONT": 2}
+        )
+        assign_vouchers(
+            all_matches,
+            voucher_csv_path=vouchers_csv_path,
+            dry_run=dry_run,
+            sb=supabase if (not dry_run and config.USE_SUPABASE_STORAGE) else None
+        )
         
         # report summary
         print(f"Buckets: {len(buckets)} | Groups: {len(all_matches)} | Unmatched: {len(all_unmatched)}")
@@ -682,7 +693,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pickup matcher")
     parser.add_argument("--dry-run", action="store_true", help="do not write to DB; export CSV instead")
     parser.add_argument("--csv", type=str, default="../matches/matches_dryrun.csv", help="CSV path for --dry-run output")
-    parser.add_argument("--days-ahead", type=int, default=10, help="only consider flights within N days ahead")
+    parser.add_argument(
+        "--days-ahead", type=int, default=10, help="inclusive end: only flights on or before (today + N days)"
+    )
+    parser.add_argument(
+        "--days-ahead-start",
+        type=int,
+        default=None,
+        help="inclusive start: only flights on or after (today + N days). Omit to keep the legacy lower bound (flight date strictly after today).",
+    )
     parser.add_argument("--vouchers", type=str, default="../vouchers/Thanksgiving.csv",help="Path to vouchers CSV")
     args = parser.parse_args()
 
@@ -690,8 +709,8 @@ if __name__ == "__main__":
         dry_run=args.dry_run,
         csv_path=args.csv,
         days_ahead=args.days_ahead,
+        days_ahead_start=args.days_ahead_start,
         vouchers_csv_path=args.vouchers,
     )
-
 
 
