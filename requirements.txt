@@ -2,7 +2,6 @@ flask
 flask_cors
 pandas
 requests
-sklearn
 supabase
 joblib
 geopy
