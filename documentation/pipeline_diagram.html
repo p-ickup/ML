@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pickup ML — Pipeline flow</title>
+  <style>
+    :root {
+      --bg: #0c1117;
+      --card: #161f2e;
+      --border: #2a3a52;
+      --text: #e8eef5;
+      --muted: #8fa3bc;
+      --config: #f59e0b;
+      --core: #38bdf8;
+      --match: #a78bfa;
+      --io: #34d399;
+      --ext: #f87171;
+      --pipe: #5b8def;
+      --pull: #34d399;
+      --push: #f472b6;
+      --read: #f59e0b;
+      --hi: #fde047;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      padding: 1.25rem 1.5rem 1rem;
+      border-bottom: 1px solid var(--border);
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    h1 { margin: 0 0 0.35rem; font-size: 1.25rem; font-weight: 600; }
+    .sub { color: var(--muted); font-size: 0.88rem; }
+    .toolbar {
+      max-width: 760px;
+      margin: 0.75rem auto 0;
+      padding: 0 1.5rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    button {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.4rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--core); }
+
+    .layout {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 1rem 1.5rem 2rem;
+      display: grid;
+      grid-template-columns: 1fr 270px;
+      gap: 1.5rem;
+      align-items: start;
+    }
+    @media (max-width: 920px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    .pipeline {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .stage {
+      padding: 0.5rem 0;
+    }
+    .stage-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.45rem;
+      text-align: center;
+    }
+    .stage-card {
+      background: rgba(22, 31, 46, 0.5);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.75rem 0.65rem;
+    }
+    .stage-rows {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .node {
+      background: var(--card);
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 0.5rem 0.75rem;
+      min-width: 118px;
+      max-width: 168px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      flex-shrink: 0;
+    }
+    .node:hover { border-color: var(--core); }
+    .node.active {
+      border-color: var(--hi);
+      box-shadow: 0 0 0 3px rgba(253, 224, 71, 0.2);
+    }
+    .node .name { font-size: 0.86rem; font-weight: 600; display: block; }
+    .node .hint { font-size: 0.68rem; color: var(--muted); margin-top: 0.1rem; display: block; }
+    .node.config { border-color: var(--config); }
+    .node.core { border-color: var(--core); }
+    .node.match { border-color: var(--match); }
+    .node.io { border-color: var(--io); }
+    .node.ext { border-color: var(--ext); }
+
+    /* Horizontal edge: source —[verb]—► consumer */
+    .h-edge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      width: 100%;
+      max-width: 420px;
+    }
+    .h-edge .connector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 72px;
+      flex: 1;
+      max-width: 120px;
+      position: relative;
+      padding: 0 4px;
+    }
+    .h-edge .connector .line {
+      width: 100%;
+      height: 3px;
+      border-radius: 2px;
+      position: relative;
+      overflow: visible;
+    }
+    .h-edge.pull .line { background: linear-gradient(90deg, var(--ext) 0%, var(--pull) 100%); }
+    .h-edge.push .line { background: linear-gradient(90deg, var(--core) 0%, var(--push) 100%); }
+    .h-edge.load .line { background: linear-gradient(90deg, var(--ext) 0%, var(--core) 100%); }
+
+    .h-edge .connector .head {
+      position: absolute;
+      right: -1px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0;
+      height: 0;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 9px solid var(--pull);
+    }
+    .h-edge.push .connector .head { border-left-color: var(--push); }
+    .h-edge.load .connector .head { border-left-color: var(--core); }
+
+    .h-edge .connector .dot {
+      position: absolute;
+      top: 50%;
+      width: 6px;
+      height: 6px;
+      margin-top: -3px;
+      border-radius: 50%;
+      background: #fff;
+      animation: slide-right 1.8s ease-in-out infinite;
+    }
+    .h-edge.pull .connector .dot { background: var(--pull); }
+    .h-edge.push .connector .dot { background: var(--push); }
+    .h-edge.load .connector .dot { background: var(--core); }
+    @keyframes slide-right {
+      0% { left: 0; opacity: 0; }
+      15% { opacity: 1; }
+      85% { opacity: 1; }
+      100% { left: calc(100% - 6px); opacity: 0; }
+    }
+
+    .h-edge .verb {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 0.2rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+    }
+    .h-edge.pull .verb { color: var(--pull); background: rgba(52, 211, 153, 0.12); }
+    .h-edge.push .verb { color: var(--push); background: rgba(244, 114, 182, 0.12); }
+    .h-edge.load .verb { color: var(--core); background: rgba(56, 189, 248, 0.12); }
+
+    .h-edge .src-label,
+    .h-edge .dst-label {
+      font-size: 0.58rem;
+      color: var(--muted);
+      text-align: center;
+      margin-top: 0.15rem;
+      max-width: 90px;
+    }
+    .h-edge .src-label { text-align: right; }
+    .h-edge .dst-label { text-align: left; }
+
+    /* Vertical pipeline handoff */
+    .v-handoff {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0.5rem 0 0.35rem;
+      cursor: pointer;
+    }
+    .v-handoff .shaft {
+      width: 3px;
+      height: 28px;
+      background: linear-gradient(180deg, var(--pipe) 0%, rgba(91, 141, 239, 0.3) 100%);
+      border-radius: 2px;
+      position: relative;
+    }
+    .v-handoff .shaft::after {
+      content: "";
+      position: absolute;
+      bottom: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 7px solid transparent;
+      border-right: 7px solid transparent;
+      border-top: 9px solid var(--pipe);
+    }
+    .v-handoff .shaft .dot {
+      position: absolute;
+      left: 50%;
+      margin-left: -3px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--pipe);
+      animation: slide-down 1.6s ease-in-out infinite;
+    }
+    @keyframes slide-down {
+      0% { top: 0; opacity: 0; }
+      20% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { top: 22px; opacity: 0; }
+    }
+    .v-handoff .pipe-tag {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--pipe);
+      margin-bottom: 0.25rem;
+    }
+    .v-handoff .payload {
+      font-size: 0.68rem;
+      color: var(--muted);
+      text-align: center;
+      max-width: 300px;
+      margin-top: 0.35rem;
+      line-height: 1.35;
+    }
+    .v-handoff.active .shaft,
+    .v-handoff.active .shaft::after { filter: brightness(1.3); }
+    .v-handoff.active .payload { color: var(--text); }
+
+    /* Helper: dashed read into stage */
+    .helpers {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.5rem 1rem;
+      margin-top: 0.55rem;
+      padding-top: 0.5rem;
+      border-top: 1px dashed rgba(245, 158, 11, 0.25);
+    }
+    .read-edge {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.15rem;
+    }
+    .read-edge .mini-shaft {
+      width: 2px;
+      height: 14px;
+      border-left: none;
+      background: repeating-linear-gradient(180deg, var(--read) 0, var(--read) 4px, transparent 4px, transparent 7px);
+      position: relative;
+    }
+    .read-edge .mini-shaft::after {
+      content: "";
+      position: absolute;
+      bottom: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 6px solid var(--read);
+    }
+    .read-edge .verb {
+      font-size: 0.58rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--read);
+      letter-spacing: 0.04em;
+    }
+    .read-edge .node {
+      min-width: 100px;
+      max-width: 130px;
+      padding: 0.3rem 0.45rem;
+    }
+    .read-edge .node .hint { display: none; }
+    .read-edge .node .name { font-size: 0.72rem; }
+
+    .solo-node {
+      display: flex;
+      justify-content: center;
+    }
+    .orchestrator-note {
+      font-size: 0.68rem;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 0.35rem;
+    }
+    .orchestrator-note strong { color: var(--core); }
+
+    .config-banner {
+      text-align: center;
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 0.75rem;
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px dashed var(--read);
+      border-radius: 8px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    aside {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      position: sticky;
+      top: 1rem;
+    }
+    aside h2 { margin: 0 0 0.6rem; font-size: 0.85rem; }
+    #detail { font-size: 0.84rem; }
+    #detail h3 { margin: 0 0 0.35rem; font-size: 0.95rem; color: var(--core); }
+    #detail p { margin: 0 0 0.5rem; color: var(--muted); }
+    .legend { font-size: 0.72rem; margin-bottom: 1rem; }
+    .legend h3 { margin: 0 0 0.4rem; font-size: 0.75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .legend-item {
+      margin-bottom: 0.45rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.45rem;
+    }
+    .legend-item .sample { flex-shrink: 0; width: 36px; height: 14px; margin-top: 2px; border-radius: 2px; }
+    .legend-item .sample.v { width: 3px; height: 18px; margin-top: 0; }
+    .legend-item .sample.r { width: 28px; height: 2px; border-top: 2px dashed var(--read); background: none; height: auto; }
+    .legend-item span.desc { color: var(--muted); line-height: 1.35; }
+    .legend-item strong { color: var(--text); font-weight: 600; }
+    .dot-type { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; margin-top: 3px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Pickup ML pipeline</h1>
+    <p class="sub">
+      Top → bottom is run order. <strong>Pull</strong> = data comes in from the left;
+      <strong>Push</strong> = data goes out to the right;
+      <strong>Next step</strong> = in-memory result handed to the stage below.
+    </p>
+  </header>
+  <div class="toolbar">
+    <button type="button" id="btn-play">▶ Walk through steps</button>
+    <button type="button" id="btn-reset">Reset</button>
+  </div>
+
+  <div class="layout">
+    <div class="pipeline" id="pipeline"></div>
+
+    <aside>
+      <div class="legend">
+        <h3>Arrow types</h3>
+        <div class="legend-item">
+          <div class="sample" style="background:linear-gradient(90deg,var(--ext),var(--pull))"></div>
+          <span class="desc"><strong>Pull</strong> — source on left, code reads/fetches from it (animated dot moves right).</span>
+        </div>
+        <div class="legend-item">
+          <div class="sample" style="background:linear-gradient(90deg,var(--core),var(--push))"></div>
+          <span class="desc"><strong>Push</strong> — code writes/sends to destination on the right.</span>
+        </div>
+        <div class="legend-item">
+          <div class="sample v" style="background:var(--pipe)"></div>
+          <span class="desc"><strong>Next step</strong> — result passed down the pipeline (dot moves down).</span>
+        </div>
+        <div class="legend-item">
+          <div class="sample r"></div>
+          <span class="desc"><strong>Reads</strong> — helper/config (dashed); settings into the step above.</span>
+        </div>
+        <h3 style="margin-top:0.75rem">Box colors</h3>
+        <div class="legend-item"><span class="dot-type" style="background:var(--config)"></span><span class="desc">Config</span></div>
+        <div class="legend-item"><span class="dot-type" style="background:var(--core)"></span><span class="desc">Orchestrator</span></div>
+        <div class="legend-item"><span class="dot-type" style="background:var(--match)"></span><span class="desc">Matching</span></div>
+        <div class="legend-item"><span class="dot-type" style="background:var(--io)"></span><span class="desc">Data I/O</span></div>
+        <div class="legend-item"><span class="dot-type" style="background:var(--ext)"></span><span class="desc">External</span></div>
+      </div>
+      <h2>Step detail</h2>
+      <div id="detail"><p>Click a box or connector.</p></div>
+    </aside>
+  </div>
+
+  <script>
+    const DETAILS = {
+      env: "Secrets: SUPABASE_URL and SUPABASE_SECRET_KEY.",
+      config: "Limits, CONNECT_*, covered dates, storage flags. Read by modules (not fetched over the network).",
+      main: "Entry point: orchestrates every stage below.",
+      rider_data: "fetch_riders(): queries Supabase Flights + Users → RiderLite list.",
+      supabase_in: "External DB. Read at start; written at end (Rides, Matches, Flights.matched).",
+      algorithmStatus: "Production only: records run scope and success/failure on AlgorithmStatus table.",
+      buckets: "make_buckets(): splits RiderLite list by direction + airport + school.",
+      ruleMatching: "match_bucket(): builds groups of 2–5 per bucket.",
+      audit: "Validates overlap, bags, terminals while ruleMatching scores candidates.",
+      connect_policy: "Reads CONNECT_* from config; gates Connect retry and merge.",
+      ont_post: "_ont_post_process_unmatched(): may attach unmatched riders to ONT groups of 4.",
+      connect_retry: "_final_lax_unmatched_retry(): extra pass on Connect-scoped unmatched.",
+      connect_merge: "merge_connect_with_existing(): pulls existing Rides from DB + merges with this run.",
+      refresh_times: "refresh_match_suggested_times(): sets suggested_time_iso per group.",
+      subsidy: "apply_group_subsidy(): LAX≥3, ONT≥2, Pomona, covered dates.",
+      vouchers: "assign_vouchers(): reads voucher pool, links codes to groups.",
+      storage: "Optional: download/upload voucher CSV via Supabase Storage.",
+      voucher_csv: "Local or Storage-backed voucher pool (e.g. Summer.csv).",
+      out_csv: "Dry-run output: matches_dryrun.csv + unmatched_reasons_dryrun.csv.",
+      out_db: "Production: insert Rides/Matches, update Flights, cleanup absorbed rides.",
+    };
+
+    /**
+     * edges: horizontal pulls/pushes within a stage
+     * solo: single processing node (pipeline continues from above)
+     * output: payload label for vertical handoff
+     * helpers: modules this stage reads (shown below with dashed "reads" arrow up)
+     * orchestrator: short note when main.py drives the step
+     */
+    const STAGES = [
+      {
+        label: "Start",
+        edges: [
+          { type: "load", verb: "load", from: { id: "env", name: ".env", hint: "secrets", kind: "ext" }, to: { id: "main", name: "main.py", hint: "run()", kind: "core" } },
+        ],
+        output: "Supabase client + imports",
+        helpers: [{ id: "config", name: "config.py", hint: "settings", kind: "config" }],
+      },
+      {
+        label: "Load riders",
+        orchestrator: "main.py calls",
+        edges: [
+          { type: "pull", verb: "fetch", from: { id: "supabase_in", name: "Supabase", hint: "Flights, Users", kind: "ext" }, to: { id: "rider_data", name: "rider_data.py", hint: "fetch_riders", kind: "io" } },
+        ],
+        output: "RiderLite[] (unmatched flights only)",
+        helpers: [{ id: "algorithmStatus", name: "algorithmStatus.py", hint: "prod", kind: "io" }],
+      },
+      {
+        label: "Bucket riders",
+        orchestrator: "main.py calls",
+        solo: { id: "buckets", name: "buckets.py", hint: "make_buckets()", kind: "match" },
+        output: "dict of bucket → riders[]",
+        helpers: [{ id: "config", name: "config.py", kind: "config" }],
+      },
+      {
+        label: "Match each bucket",
+        orchestrator: "main.py loops buckets",
+        solo: { id: "ruleMatching", name: "ruleMatching.py", hint: "match_bucket()", kind: "match" },
+        output: "Match[] + unmatched[] + diagnostics",
+        helpers: [
+          { id: "audit", name: "audit.py", kind: "match" },
+          { id: "connect_policy", name: "connect_policy.py", kind: "config" },
+        ],
+      },
+      {
+        label: "ONT post-process",
+        solo: { id: "ont_post", name: "ruleMatching.py", hint: "_ont_post_process", kind: "match" },
+        output: "updated Match[] + unmatched[]",
+        helpers: [],
+      },
+      {
+        label: "Connect retry",
+        orchestrator: "main.py (if Connect on)",
+        solo: { id: "connect_retry", name: "main.py", hint: "_final_lax_unmatched_retry", kind: "core" },
+        output: "more Match[] from Connect-scoped unmatched",
+        helpers: [{ id: "connect_policy", name: "connect_policy.py", kind: "config" }],
+      },
+      {
+        label: "Connect merge",
+        orchestrator: "main.py calls",
+        edges: [
+          { type: "pull", verb: "fetch rides", from: { id: "supabase_in", name: "Supabase", hint: "existing Rides", kind: "ext" }, to: { id: "connect_merge", name: "connect_merge.py", hint: "merge_connect_with_existing", kind: "match" } },
+        ],
+        output: "large Connect Match[]; smaller rides may be absorbed",
+        helpers: [{ id: "connect_policy", name: "connect_policy.py", kind: "config" }],
+      },
+      {
+        label: "Pickup times",
+        solo: { id: "refresh_times", name: "ruleMatching.py", hint: "refresh_match_suggested_times", kind: "match" },
+        output: "suggested_time_iso on each Match",
+        helpers: [],
+      },
+      {
+        label: "Subsidy & vouchers",
+        orchestrator: "main.py",
+        solo: { id: "subsidy", name: "main.py", hint: "apply_group_subsidy", kind: "core" },
+        edges: [
+          { type: "pull", verb: "read pool", from: { id: "voucher_csv", name: "vouchers/*.csv", hint: "or Storage", kind: "ext" }, to: { id: "vouchers", name: "vouchers.py", hint: "assign_vouchers", kind: "io" } },
+        ],
+        output: "group_subsidy + voucher fields on riders",
+        helpers: [{ id: "config", name: "config.py", kind: "config" }, { id: "storage", name: "storage.py", kind: "io" }],
+      },
+      {
+        label: "Output",
+        orchestrator: "main.py writes",
+        edges: [
+          { type: "push", verb: "write csv", from: { id: "main", name: "main.py", hint: "dry-run", kind: "core" }, to: { id: "out_csv", name: "matches/*.csv", hint: "dry-run", kind: "ext" } },
+          { type: "push", verb: "write db", from: { id: "main", name: "main.py", hint: "production", kind: "core" }, to: { id: "out_db", name: "Supabase", hint: "Rides + Matches", kind: "ext" } },
+        ],
+        output: null,
+        helpers: [],
+      },
+    ];
+
+    let playTimer = null;
+    const detailEl = document.getElementById("detail");
+
+    function nodeHtml(n) {
+      return `<div class="node ${n.kind}" data-id="${n.id}" role="button" tabindex="0">
+        <span class="name">${n.name}</span>
+        <span class="hint">${n.hint || ""}</span>
+      </div>`;
+    }
+
+    function hEdgeHtml(e) {
+      return `<div class="h-edge ${e.type}" data-edge="${e.type}">
+        <div style="display:flex;flex-direction:column;align-items:center">
+          ${nodeHtml(e.from)}
+          <span class="src-label">source</span>
+        </div>
+        <div class="connector">
+          <span class="verb">${e.verb}</span>
+          <div class="line"><span class="dot"></span><span class="head"></span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          ${nodeHtml(e.to)}
+          <span class="dst-label">consumer</span>
+        </div>
+      </div>`;
+    }
+
+    function vHandoffHtml(label, stepIndex) {
+      return `<div class="v-handoff" data-step="${stepIndex}" role="button" tabindex="0">
+        <span class="pipe-tag">next step</span>
+        <div class="shaft"><span class="dot"></span></div>
+        <span class="payload">${label}</span>
+      </div>`;
+    }
+
+    function helpersHtml(helpers, targetIds) {
+      if (!helpers.length) return "";
+      const targets = targetIds.join(", ");
+      return `<div class="helpers">${helpers.map(h => `
+        <div class="read-edge">
+          ${nodeHtml(h)}
+          <div class="mini-shaft"></div>
+          <span class="verb">reads</span>
+          <span style="font-size:0.58rem;color:var(--muted);max-width:90px;text-align:center">into ${targets}</span>
+        </div>
+      `).join("")}</div>`;
+    }
+
+    function targetNodeIds(stage) {
+      if (stage.edges) return stage.edges.map(e => e.to.name);
+      if (stage.solo) return [stage.solo.name];
+      return ["step"];
+    }
+
+    function render() {
+      const pipe = document.getElementById("pipeline");
+      pipe.innerHTML = `<div class="config-banner"><strong>config.py</strong> — dashed <em>reads</em> arrows point up into the step that imports it (settings, not rider data).</div>`;
+
+      STAGES.forEach((stage, i) => {
+        const section = document.createElement("div");
+        section.className = "stage";
+        section.dataset.step = i;
+
+        let body = "";
+        if (stage.orchestrator) {
+          body += `<p class="orchestrator-note">${stage.orchestrator} <strong>↓</strong></p>`;
+        }
+        body += `<div class="stage-rows">`;
+        if (stage.solo) {
+          body += `<div class="solo-node">${nodeHtml(stage.solo)}</div>`;
+        }
+        if (stage.edges) {
+          stage.edges.forEach(e => { body += hEdgeHtml(e); });
+        }
+        body += `</div>`;
+        body += helpersHtml(stage.helpers || [], targetNodeIds(stage));
+
+        section.innerHTML = `
+          <div class="stage-label">${i + 1}. ${stage.label}</div>
+          <div class="stage-card">${body}</div>
+        `;
+        pipe.appendChild(section);
+
+        if (stage.output && i < STAGES.length - 1) {
+          const handoff = document.createElement("div");
+          handoff.innerHTML = vHandoffHtml(stage.output, i);
+          handoff.firstChild.addEventListener("click", () => highlightStep(i + 1));
+          pipe.appendChild(handoff);
+        }
+      });
+
+      pipe.querySelectorAll(".node").forEach(el => {
+        el.addEventListener("click", e => {
+          e.stopPropagation();
+          selectNode(el.dataset.id);
+        });
+      });
+    }
+
+    function selectNode(id) {
+      document.querySelectorAll(".node").forEach(n => n.classList.toggle("active", n.dataset.id === id));
+      detailEl.innerHTML = `<h3>${id}</h3><p>${DETAILS[id] || "—"}</p>`;
+    }
+
+    function highlightStep(step) {
+      document.querySelectorAll(".stage").forEach((s, i) => {
+        s.style.opacity = step < 0 || i === step || i === step - 1 ? "1" : "0.38";
+      });
+      document.querySelectorAll(".v-handoff").forEach(h => {
+        h.classList.toggle("active", step >= 0 && Number(h.dataset.step) === step - 1);
+      });
+      if (step >= 0 && step < STAGES.length) {
+        const stage = STAGES[step];
+        const id = stage.solo?.id || stage.edges?.[0]?.to?.id || stage.edges?.[0]?.from?.id;
+        if (id) selectNode(id);
+        detailEl.innerHTML = `
+          <h3>Step ${step + 1}: ${stage.label}</h3>
+          <p>${stage.output ? "<strong>Hands off:</strong> " + stage.output : "<strong>Final:</strong> writes to CSV and/or Supabase."}</p>
+          <p>${DETAILS[id] || ""}</p>
+        `;
+      }
+    }
+
+    function reset() {
+      if (playTimer) clearInterval(playTimer);
+      playTimer = null;
+      document.querySelectorAll(".stage").forEach(s => { s.style.opacity = "1"; });
+      document.querySelectorAll(".v-handoff").forEach(h => h.classList.remove("active"));
+      document.querySelectorAll(".node").forEach(n => n.classList.remove("active"));
+      document.getElementById("btn-play").textContent = "▶ Walk through steps";
+      detailEl.innerHTML = "<p>Click a box or connector.</p>";
+    }
+
+    document.getElementById("btn-reset").addEventListener("click", reset);
+    document.getElementById("btn-play").addEventListener("click", () => {
+      if (playTimer) { reset(); return; }
+      let s = 0;
+      highlightStep(0);
+      document.getElementById("btn-play").textContent = "⏸ Pause";
+      playTimer = setInterval(() => {
+        s++;
+        if (s >= STAGES.length) { reset(); return; }
+        highlightStep(s);
+      }, 1800);
+    });
+
+    render();
+  </script>
+</body>
+</html>
