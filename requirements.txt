@@ -1,8 +1,4 @@
-flask
-flask_cors
+# main.py pipeline (python3 main.py)
 pandas
-requests
+python-dotenv
 supabase
-joblib
-geopy
-googlemaps
