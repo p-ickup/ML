@@ -13,12 +13,13 @@ from typing import Dict, List, Optional, Tuple
 
 import algorithmStatus
 import config
-import force_match as nepo
+import connect_policy as cp
 import storage
 from buckets import bucket_names, make_buckets
 from dotenv import load_dotenv
 from rider_data import RiderData, RiderLite
-from ruleMatching import Match, _ont_post_process_unmatched, match_bucket, merge_groups_into_connect_shuttles
+from connect_merge import cleanup_absorbed_rides, merge_connect_with_existing
+from ruleMatching import Match, _ont_post_process_unmatched, match_bucket, refresh_match_suggested_times
 from supabase import Client, create_client
 
 from vouchers import assign_vouchers, is_ride_date_covered
@@ -119,19 +120,20 @@ def _compute_group_time_window(riders: List[RiderLite]) -> Tuple[str, str]:
     latest_time = earliest_end.time().replace(microsecond=0).isoformat()
     return earliest_time, latest_time
 
-# compute earliest intersection start for a group (date_str, time_str)
+# Official ride date/time for persistence (uses suggested_time_iso from pickup rules).
 def _match_datetime_from_earliest(m: Match) -> Tuple[str, str]:
+    if m.suggested_time_iso:
+        dt = datetime.fromisoformat(m.suggested_time_iso)
+        return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
     starts, ends = [], []
     for r in m.riders:
         s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
         e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-        starts.append(s); ends.append(e)
-    latest_start = max(starts)
-    earliest_end = min(ends)
-    if earliest_end <= latest_start:
-        dt = latest_start  # boundary/touching case
-    else:
-        dt = latest_start
+        if e < s:
+            e += timedelta(days=1)
+        starts.append(s)
+        ends.append(e)
+    dt = max(starts)
     return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
 
 # split ISO to (date, time) if needed elsewhere
@@ -366,11 +368,11 @@ def _final_lax_unmatched_retry(
     into existing groups — only form new groups among themselves (e.g. 3 riders
     with exact overlap can become one new group).
     """
-    lax_unmatched = [r for r in all_unmatched if (r.airport or "").strip().upper() == "LAX"]
-    if not lax_unmatched:
+    connect_unmatched = [r for r in all_unmatched if cp.rider_in_connect_scope(r)]
+    if not connect_unmatched:
         return all_matches, all_unmatched
 
-    lax_buckets = make_buckets(lax_unmatched)
+    lax_buckets = make_buckets(connect_unmatched)
     new_matches: List[Match] = []
     lax_leftovers: List[RiderLite] = []
     for name, riders_in_bucket in lax_buckets.items():
@@ -386,9 +388,9 @@ def _final_lax_unmatched_retry(
         return all_matches, all_unmatched
 
     matched_flight_ids = {r.flight_id for m in new_matches for r in m.riders}
-    non_lax_unmatched = [r for r in all_unmatched if (r.airport or "").strip().upper() != "LAX"]
-    all_unmatched_new = non_lax_unmatched + lax_leftovers
-    print(f"  LAX final retry (new groups only): {len(new_matches)} new group(s), {len(matched_flight_ids)} riders matched")
+    non_connect_unmatched = [r for r in all_unmatched if not cp.rider_in_connect_scope(r)]
+    all_unmatched_new = non_connect_unmatched + lax_leftovers
+    print(f"  Connect-scope final retry (new groups only): {len(new_matches)} new group(s), {len(matched_flight_ids)} riders matched")
     return all_matches + new_matches, all_unmatched_new
 
 
@@ -618,13 +620,6 @@ def run(
 
         # iterate buckets and match
         for name, riders_in_bucket in buckets.items():
-            # Try nepo matching first (if enabled)
-            nepo_match, remaining_riders = nepo.force_nepo_match(riders_in_bucket, bucket_key=name)
-            if nepo_match:
-                all_matches.append(nepo_match)
-                riders_in_bucket = remaining_riders  # Continue with remaining riders
-            
-            # Regular matching on remaining riders
             matches, leftovers, diag = match_bucket(riders_in_bucket, bucket_key=name)  # 3 values
             all_matches.extend(matches)
             all_unmatched.extend(leftovers)
@@ -634,12 +629,28 @@ def run(
         all_matches, all_unmatched = _ont_post_process_unmatched(all_matches, all_unmatched)
 
         # Final LAX retry when Connect Shuttle is on: re-run matching on LAX unmatched (e.g. 3 with exact overlap)
-        if getattr(config, "LAX_CONNECT_SHUTTLE_MIN", None) is not None:
+        if cp.connect_enabled():
             all_matches, all_unmatched = _final_lax_unmatched_retry(all_matches, all_unmatched)
 
-        # After all matches: try to merge LAX departure groups with overlapping times into Connect shuttles
-        if getattr(config, "LAX_CONNECT_SHUTTLE_MIN", None) is not None:
-            all_matches = merge_groups_into_connect_shuttles(all_matches)
+        # Connect merge: existing DB groups + this run + unmatched (LAX/ONT per config)
+        connect_for_cleanup: List[Match] = []
+        if cp.connect_enabled():
+            run_flight_ids = {r.flight_id for r in riders}
+            start_date = min(r.date for r in riders)
+            end_date = max(r.date for r in riders)
+            all_matches, all_unmatched, connect_for_cleanup = merge_connect_with_existing(
+                supabase,
+                all_matches,
+                all_unmatched,
+                run_flight_ids=run_flight_ids,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+        # Final pickup times (TO: 15 min before overlap end; FROM: 15 min after overlap start)
+        time_updates = refresh_match_suggested_times(all_matches, skip_connect=True)
+        if time_updates:
+            print(f"Refreshed suggested pickup time on {time_updates} group(s).")
 
         # Subsidy + vouchers once the final group list is known (ONT splits, LAX retry, Connect merge)
         apply_group_subsidy(
@@ -673,6 +684,8 @@ def run(
 
         # DB writes only if not dry-run
         if not dry_run:
+            if connect_for_cleanup:
+                cleanup_absorbed_rides(supabase, connect_for_cleanup)
             ride_ids = _write_matches_db(supabase, all_matches, riders)
             # Update status to success
             algorithmStatus.update_algorithm_status(supabase, status_id, "success", run_id=run_id)

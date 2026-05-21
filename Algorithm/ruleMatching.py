@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Tuple
 
 import audit
 import config as config
+import connect_policy as cp
 from rider_data import RiderLite
 
 
@@ -824,9 +825,15 @@ def _lax_optimize_4_and_2(matches: List[Match], bucket_key: Optional[str] = None
     return optimized_matches
 
 
-# convert a group to a Match with suggested time at overlap midpoint
-def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) -> Match:
-    # Compute overlap window
+def pickup_datetime_for_group(group: List[RiderLite]) -> datetime:
+    """
+    Pickup time from the group's common overlap window.
+    TO airport: 15 min before overlap end (if possible), else overlap end.
+    FROM airport: 15 min after overlap start (if possible), else overlap end.
+    """
+    if not group:
+        return datetime.now().replace(second=0, microsecond=0)
+
     starts, ends = [], []
     for g in group:
         s, e = _interval(g)
@@ -835,30 +842,44 @@ def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) ->
 
     latest_start = max(starts)
     earliest_end = min(ends)
-
-    # All riders in a group ALWAYS share same direction (bucket guarantee)
     to_airport = group[0].to_airport
 
-    # Time assignment based on direction
-    # TO airport: 15 minutes before the latest time of the overlap (if possible), otherwise the latest time
-    # FROM airport: 15 minutes after the earliest time of the overlap
     if earliest_end <= latest_start:
-        # touching window fallback
         chosen = latest_start
     else:
         if to_airport:
-            # going TO airport → 15 min before latest time (earliest_end); if that's before overlap start, use latest time
             chosen = earliest_end - timedelta(minutes=15)
             if chosen < latest_start:
                 chosen = earliest_end
         else:
-            # from airport → 15 min after earliest overlap (latest_start)
             chosen = latest_start + timedelta(minutes=15)
             if chosen > earliest_end:
                 chosen = earliest_end
 
-    # Normalize seconds
-    chosen = chosen.replace(second=0, microsecond=0)
+    return chosen.replace(second=0, microsecond=0)
+
+
+def refresh_match_suggested_times(
+    matches: List[Match],
+    skip_connect: bool = True,
+) -> int:
+    """Recompute suggested_time_iso on each match. Returns count updated."""
+    updated = 0
+    for m in matches:
+        if skip_connect and getattr(m, "ride_type", None) == "Connect":
+            continue
+        if not m.riders:
+            continue
+        new_iso = pickup_datetime_for_group(m.riders).isoformat()
+        if m.suggested_time_iso != new_iso:
+            m.suggested_time_iso = new_iso
+            updated += 1
+    return updated
+
+
+# convert a group to a Match with suggested time at overlap midpoint
+def _group_to_match(group: List[RiderLite], bucket_key: Optional[str] = None) -> Match:
+    chosen = pickup_datetime_for_group(group)
 
     # Terminal handling (strict mode)
     terms = [g.terminal or "" for g in group]
@@ -1175,10 +1196,8 @@ def _final_leftovers(
 
 
 def _is_lax_departures_bucket(bucket_key: Optional[str]) -> bool:
-    """True if this bucket is LAX departures (TO LAX)."""
-    if not bucket_key:
-        return False
-    return "LAX" in bucket_key and "TO" in bucket_key
+    """True if this bucket is in Connect scope (airport + direction per config)."""
+    return cp.bucket_key_in_connect_scope(bucket_key)
 
 
 def _time_overlap_no_bags(members: List[RiderLite]) -> bool:
@@ -1241,31 +1260,19 @@ def _form_connect_shuttle_groups(
     bucket_key: Optional[str],
 ) -> Tuple[List[Match], List[RiderLite]]:
     """
-    Partition pool into Connect Shuttle groups (8-25 or 30-55). Prefer 30-55, then 8-25.
-    Returns (list of Connect Shuttle matches, remaining riders who didn't fit).
+    Partition pool into Connect groups per CONNECT_SIZE* tiers (larger tier first).
+    Returns (list of Connect matches, remaining riders who didn't fit).
     """
-    min_s = getattr(config, "LAX_CONNECT_SHUTTLE_MIN", 8)
-    t1_max = getattr(config, "LAX_CONNECT_SHUTTLE_TIER1_MAX", 25)
-    t2_min = getattr(config, "LAX_CONNECT_SHUTTLE_TIER2_MIN", 30)
-    t2_max = getattr(config, "LAX_CONNECT_SHUTTLE_TIER2_MAX", 55)
     matches: List[Match] = []
     remaining = list(pool)
-    # Prefer 30-55 groups first
-    while len(remaining) >= t2_min:
-        take = min(len(remaining), t2_max)
-        group = remaining[:take]
-        remaining = remaining[take:]
-        m = _group_to_match(group, bucket_key=bucket_key)
-        m.ride_type = "Connect"
-        matches.append(m)
-    # Then 8-25 groups
-    while len(remaining) >= min_s:
-        take = min(len(remaining), t1_max)
-        group = remaining[:take]
-        remaining = remaining[take:]
-        m = _group_to_match(group, bucket_key=bucket_key)
-        m.ride_type = "Connect"
-        matches.append(m)
+    for lo, hi in cp.connect_tiers():
+        while len(remaining) >= lo:
+            take = min(len(remaining), hi)
+            group = remaining[:take]
+            remaining = remaining[take:]
+            m = _group_to_match(group, bucket_key=bucket_key)
+            m.ride_type = "Connect"
+            matches.append(m)
     return matches, remaining
 
 
@@ -1274,15 +1281,15 @@ def _try_lax_connect_shuttles(
     bucket_key: Optional[str],
 ) -> Tuple[List[Match], List[RiderLite]]:
     """
-    For LAX departures only: try to form Connect Shuttle groups (8-25 or 30-55).
+    For Connect-scoped buckets: try to form Connect groups per config tiers.
     Uses only time overlap (no bags). Expands with same-flight riders even if times don't align.
     If we can form at least one group of min size, return those matches and remaining riders for normal matching.
-    If we can't form a group of 8+, return ([], riders) so caller runs normal matching on everyone.
+    If we can't form a group, return ([], riders) so caller runs normal matching on everyone.
     """
     if not _is_lax_departures_bucket(bucket_key):
         return [], riders
-    min_s = getattr(config, "LAX_CONNECT_SHUTTLE_MIN", 8)
-    if len(riders) < min_s:
+    min_s, _ = cp.connect_search_bounds()
+    if min_s is None or len(riders) < min_s:
         return [], riders
 
     riders_by_date: Dict[str, List[RiderLite]] = {}
@@ -1321,39 +1328,34 @@ def _try_lax_connect_shuttles(
 
 def merge_groups_into_connect_shuttles(matches: List[Match]) -> List[Match]:
     """
-    After all matching: try to merge LAX departure groups that have overlapping times
-    into a single Connect shuttle (8-25 or 30-55). Only considers LAX departures (TO LAX).
-    Runs once on the full match list and returns an updated list (some groups replaced by one Connect).
+    After all matching: try to merge Connect-scoped groups with overlapping times
+    into a single Connect shuttle (per CONNECT_SIZE* tiers).
     """
-    min_s = getattr(config, "LAX_CONNECT_SHUTTLE_MIN", 8)
-    t1_max = getattr(config, "LAX_CONNECT_SHUTTLE_TIER1_MAX", 25)
-    t2_min = getattr(config, "LAX_CONNECT_SHUTTLE_TIER2_MIN", 30)
-    t2_max = getattr(config, "LAX_CONNECT_SHUTTLE_TIER2_MAX", 55)
+    if not cp.connect_enabled():
+        return matches
 
-    # Split into LAX-departure and other (keep order for others)
-    lax_matches: List[Match] = []
+    connect_matches: List[Match] = []
     other_matches: List[Match] = []
     for m in matches:
         if _is_lax_departures_bucket(m.bucket_key):
-            lax_matches.append(m)
+            connect_matches.append(m)
         else:
             other_matches.append(m)
 
-    if not lax_matches:
+    if not connect_matches:
         return matches
 
-    # Group LAX matches by (bucket_key, date)
     by_bucket_date: Dict[Tuple[str, str], List[Match]] = {}
-    for m in lax_matches:
+    for m in connect_matches:
         if not m.riders:
             continue
         key = (m.bucket_key or "", m.riders[0].date)
         by_bucket_date.setdefault(key, []).append(m)
 
-    out_lax: List[Match] = []
+    out_connect: List[Match] = []
     for (bucket_key, date), group_matches in by_bucket_date.items():
         if not bucket_key or not _is_lax_departures_bucket(bucket_key):
-            out_lax.extend(group_matches)
+            out_connect.extend(group_matches)
             continue
         remaining = list(group_matches)
         # Repeatedly try to merge: find a maximal cluster with common overlap and size in [8,25] or [30,55]
@@ -1380,17 +1382,15 @@ def merge_groups_into_connect_shuttles(matches: List[Match]) -> List[Match]:
                 if not added:
                     break
             n = len(riders)
-            if t2_min <= n <= t2_max or min_s <= n <= t1_max:
+            if cp.fits_connect_size(n):
                 merged = _group_to_match(riders, bucket_key=bucket_key)
                 merged.ride_type = "Connect"
-                out_lax.append(merged)
+                out_connect.append(merged)
             else:
-                # Cluster doesn't fit Connect size; put back as original matches
-                out_lax.extend(cluster)
+                out_connect.extend(cluster)
 
-    # Rebuild full list: other first (same order), then LAX (order by bucket/date)
     result = list(other_matches)
-    result.extend(out_lax)
+    result.extend(out_connect)
     return result
 
 

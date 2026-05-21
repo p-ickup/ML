@@ -85,7 +85,6 @@ class RiderData:
                 "flight_id,user_id,flight_no,airline_iata,earliest_time,latest_time,"
                 "airport,date,to_airport,terminal,matched,bag_no,bag_no_large,bag_no_personal"
             )
-            .is_("matched", None)
             .order("date", desc=False)
             .order("earliest_time", desc=False)
         )
@@ -100,8 +99,13 @@ class RiderData:
             q = q.lte("date", end_date)
 
         resp = q.execute()
-        
-        return resp.data or []
+        rows = []
+        for row in resp.data or []:
+            # Unmatched = NULL or False (main pipeline only processes unmatched flights)
+            if row.get("matched") is True:
+                continue
+            rows.append(row)
+        return rows
 
 
     # fetch school and name info for given user_ids
