@@ -425,7 +425,7 @@
   <script>
     const DETAILS = {
       env: "Secrets: SUPABASE_URL and SUPABASE_SECRET_KEY.",
-      config: "Limits, CONNECT_*, covered dates, storage flags. Read by modules (not fetched over the network).",
+      config: "Limits, CONNECT_*, covered dates. Read by modules (not fetched over the network).",
       main: "Entry point: orchestrates every stage below.",
       rider_data: "fetch_riders(): queries Supabase Flights + Users → RiderLite list.",
       supabase_in: "External DB. Read at start; written at end (Rides, Matches, Flights.matched).",
@@ -440,8 +440,7 @@
       refresh_times: "refresh_match_suggested_times(): sets suggested_time_iso per group.",
       subsidy: "apply_group_subsidy(): LAX≥3, ONT≥2, Pomona, covered dates.",
       vouchers: "assign_vouchers(): reads voucher pool, links codes to groups.",
-      storage: "Optional: download/upload voucher CSV via Supabase Storage.",
-      voucher_csv: "Local or Storage-backed voucher pool (e.g. Summer.csv).",
+      voucher_csv: "Local voucher pool (e.g. Summer.csv).",
       out_csv: "Dry-run output: matches_dryrun.csv + unmatched_reasons_dryrun.csv.",
       out_db: "Production: insert Rides/Matches, update Flights, cleanup absorbed rides.",
     };
@@ -521,10 +520,10 @@
         orchestrator: "main.py",
         solo: { id: "subsidy", name: "main.py", hint: "apply_group_subsidy", kind: "core" },
         edges: [
-          { type: "pull", verb: "read pool", from: { id: "voucher_csv", name: "vouchers/*.csv", hint: "or Storage", kind: "ext" }, to: { id: "vouchers", name: "vouchers.py", hint: "assign_vouchers", kind: "io" } },
+          { type: "pull", verb: "read pool", from: { id: "voucher_csv", name: "vouchers/*.csv", hint: "local CSV", kind: "ext" }, to: { id: "vouchers", name: "vouchers.py", hint: "assign_vouchers", kind: "io" } },
         ],
         output: "group_subsidy + voucher fields on riders",
-        helpers: [{ id: "config", name: "config.py", kind: "config" }, { id: "storage", name: "storage.py", kind: "io" }],
+        helpers: [{ id: "config", name: "config.py", kind: "config" }],
       },
       {
         label: "Output",
