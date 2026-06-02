@@ -51,12 +51,3 @@ COVERED_DATES_OUTBOUND = [       # school → airport (to_airport=True)
 COVERED_DATES_INBOUND = [        # airport → school (to_airport=False)
     "03-20", "03-21", "03-22",
 ]
-
-
-# SUPABASE STORAGE
-# Where voucher CSV and dry-run outputs live. False = local files under ../vouchers and ../matches.
-USE_SUPABASE_STORAGE = False       # True = download/upload vouchers from Supabase Storage
-STORAGE_VOUCHERS_BUCKET = "vouchers"
-STORAGE_DRYRUNS_BUCKET = "dry-runs"   # bucket for matches_dryrun_*.csv uploads
-VOUCHERS_ACTIVE_FILE = "active.csv"   # voucher pool filename in the vouchers bucket
-VOUCHERS_ARCHIVE_FOLDER = "archive"   # previous active.csv copies on each production voucher update

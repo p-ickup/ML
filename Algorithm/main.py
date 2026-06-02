@@ -14,7 +14,6 @@ from typing import Dict, List, Optional, Tuple
 import algorithmStatus
 import config
 import connect_policy as cp
-import storage
 from buckets import bucket_names, make_buckets
 from dotenv import load_dotenv
 from rider_data import RiderData, RiderLite
@@ -146,8 +145,6 @@ def _write_matches_csv(
     matches: List[Match], 
     all_riders: List[RiderLite], 
     csv_path: str,
-    sb: Optional[Client] = None,
-    dry_run: bool = False
 ) -> None:
     """
     Write matches to a CSV (one row per matched ride group).
@@ -268,21 +265,12 @@ def _write_matches_csv(
 
     fieldnames = list(rows[0].keys())
     
-    # Write to local file first (for both dry-run and real runs)
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
-    
-    # If dry-run and using Supabase Storage, upload to Supabase Storage with timestamp
-    if dry_run and config.USE_SUPABASE_STORAGE and sb is not None:
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        storage_filename = f"matches_dryrun_{timestamp}.csv"
-        print(f"Uploading dry-run matches CSV to Supabase Storage: {storage_filename}")
-        storage.upload_file(sb, config.STORAGE_DRYRUNS_BUCKET, storage_filename, csv_path)
-        print(f"Successfully uploaded to {config.STORAGE_DRYRUNS_BUCKET}/{storage_filename}")
-    else:
-        print(f"Matches CSV saved to local file: {csv_path}")
+
+    print(f"Matches CSV saved to: {csv_path}")
 
     considered_ids = {r.flight_id for r in all_riders}
 
@@ -303,8 +291,6 @@ def _write_unmatched_with_reasons(
     unmatched: List[RiderLite], 
     reasons: dict, 
     csv_path: str,
-    sb: Optional[Client] = None,
-    dry_run: bool = False
 ) -> None:
     rows = []
     for r in unmatched:
@@ -337,22 +323,13 @@ def _write_unmatched_with_reasons(
         row.get("name") or "",
     ))
     
-    # Write to local file first
     with open(csv_path, "w", newline="") as f:
         import csv
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader()
         w.writerows(rows)
-    
-    # If dry-run and using Supabase Storage, upload to Supabase Storage with timestamp
-    if dry_run and config.USE_SUPABASE_STORAGE and sb is not None:
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        storage_filename = f"unmatched_reasons_dryrun_{timestamp}.csv"
-        print(f"Uploading dry-run unmatched reasons CSV to Supabase Storage: {storage_filename}")
-        storage.upload_file(sb, config.STORAGE_DRYRUNS_BUCKET, storage_filename, csv_path)
-        print(f"Successfully uploaded to {config.STORAGE_DRYRUNS_BUCKET}/{storage_filename}")
-    else:
-        print(f"Unmatched reasons CSV saved to local file: {csv_path}")
+
+    print(f"Unmatched reasons CSV saved to: {csv_path}")
     
     print(f"Wrote {len(rows)} unmatched riders with reasons → {csv_path}")
 
@@ -661,26 +638,13 @@ def run(
             all_matches,
             voucher_csv_path=vouchers_csv_path,
             dry_run=dry_run,
-            sb=supabase if (not dry_run and config.USE_SUPABASE_STORAGE) else None
         )
         
         # report summary
         print(f"Buckets: {len(buckets)} | Groups: {len(all_matches)} | Unmatched: {len(all_unmatched)}")
 
-        _write_matches_csv(
-            all_matches, 
-            riders, 
-            csv_path, 
-            sb=supabase if (dry_run and config.USE_SUPABASE_STORAGE) else None, 
-            dry_run=dry_run
-        )
-        _write_unmatched_with_reasons(
-            all_unmatched, 
-            all_diag, 
-            unmatched_csv_path, 
-            sb=supabase if (dry_run and config.USE_SUPABASE_STORAGE) else None, 
-            dry_run=dry_run
-        )
+        _write_matches_csv(all_matches, riders, csv_path)
+        _write_unmatched_with_reasons(all_unmatched, all_diag, unmatched_csv_path)
 
         # DB writes only if not dry-run
         if not dry_run:
