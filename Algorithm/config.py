@@ -49,5 +49,5 @@ COVERED_DATES_OUTBOUND = [       # school → airport (to_airport=True)
     "05-12", "05-13", "05-14", "05-15", "05-16", "05-17", "05-18", "05-19",
 ]
 COVERED_DATES_INBOUND = [        # airport → school (to_airport=False)
-    "03-20", "03-21", "03-22",
+    "03-20", "03-21", "03-22","06-29", "06-30", "07-01"
 ]

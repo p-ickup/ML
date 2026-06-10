@@ -396,31 +396,3 @@ def merge_connect_with_existing(
         f"{len(leftover_matches)} small group(s), {len(still_unmatched)} unmatched in scope"
     )
     return other_matches + leftover_matches + connect_matches, still_unmatched, connect_matches
-
-
-def cleanup_absorbed_rides(sb: Client, connect_matches: Sequence[Match]) -> None:
-    flight_ids: Set[int] = set()
-    for m in connect_matches:
-        for r in m.riders:
-            flight_ids.add(r.flight_id)
-    if not flight_ids:
-        return
-
-    old_matches = []
-    for i in range(0, len(sorted(flight_ids)), 100):
-        chunk = sorted(flight_ids)[i : i + 100]
-        resp = sb.table("Matches").select("ride_id,flight_id").in_("flight_id", chunk).execute()
-        old_matches.extend(resp.data or [])
-
-    old_ride_ids: Set[int] = set()
-    for row in old_matches:
-        if row.get("ride_id") is not None:
-            old_ride_ids.add(int(row["ride_id"]))
-
-    for row in old_matches:
-        sb.table("Matches").delete().eq("ride_id", row["ride_id"]).eq("flight_id", row["flight_id"]).execute()
-
-    for ride_id in old_ride_ids:
-        remaining = sb.table("Matches").select("flight_id").eq("ride_id", ride_id).execute()
-        if not remaining.data:
-            sb.table("Rides").delete().eq("ride_id", ride_id).execute()
