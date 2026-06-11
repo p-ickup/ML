@@ -1,0 +1,6 @@
+Date (start),Date (end),Contingency,voucher_link,TO_AIRPORT,AIRPORT,USED,start_date,end_date
+March 12,March 15,False,https://r.uber.com/RPGAEMAKVQG,True,ONT,True,2026-03-12,2026-03-15
+March 12,March 15,False,https://r.uber.com/RBWUMRARYNK,True,ONT,False,2026-03-12,2026-03-15
+March 12,March 15,True,https://r.uber.com/TESTTHREE,True,LAX,False,2026-03-12,2026-03-15
+March 16,March 20,False,https://r.uber.com/TESTFOUR,False,ONT,False,2026-03-16,2026-03-20
+March 16,March 20,True,https://r.uber.com/TESTFIVE,False,LAX,False,2026-03-16,2026-03-20
