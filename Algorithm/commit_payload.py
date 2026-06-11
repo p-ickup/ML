@@ -9,12 +9,13 @@ Postgres RPC. The RPC is the transaction boundary.
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import config
 from rider_data import RiderLite
 from ruleMatching import Match
+from time_windows import common_window, time_string
 from vouchers import is_ride_date_covered
 
 
@@ -109,21 +110,8 @@ def compute_group_time_window(riders: Sequence[RiderLite]) -> Tuple[str, str]:
     if not riders:
         raise MatchingCommitError("Cannot compute a group time window without riders.")
 
-    starts, ends = [], []
-    for r in riders:
-        s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-        e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-        if e < s:
-            e += timedelta(days=1)
-        starts.append(s)
-        ends.append(e)
-
-    latest_start = max(starts)
-    earliest_end = min(ends)
-    return (
-        latest_start.time().replace(microsecond=0).isoformat(),
-        earliest_end.time().replace(microsecond=0).isoformat(),
-    )
+    latest_start, earliest_end = common_window(riders)
+    return time_string(latest_start), time_string(earliest_end)
 
 
 def match_datetime_from_earliest(m: Match) -> Tuple[str, str]:
@@ -132,11 +120,7 @@ def match_datetime_from_earliest(m: Match) -> Tuple[str, str]:
         dt = datetime.fromisoformat(m.suggested_time_iso)
         return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
 
-    starts = []
-    for r in m.riders:
-        s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-        starts.append(s)
-    dt = max(starts)
+    dt, _ = common_window(m.riders)
     return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
 
 

@@ -9,6 +9,7 @@ import audit
 import config as config
 import connect_policy as cp
 from rider_data import RiderLite
+from time_windows import common_window, rider_interval
 
 
 # shape returned to main for persistence / writing
@@ -24,14 +25,7 @@ class Match:
 
 # parse a rider's window into datetimes
 def _interval(r: RiderLite) -> Tuple[datetime, datetime]:
-    start = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-    end   = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-
-    # Handle overnight (cross-midnight) windows
-    if end < start:
-        end += timedelta(days=1)
-
-    return start, end
+    return rider_interval(r)
 
 
 # calculate time window duration in minutes for a rider
@@ -48,14 +42,7 @@ def _time_window_duration(r: RiderLite) -> int:
 
 # compute intersection [start,end) and its minutes for any group
 def _intersection(members: List[RiderLite]) -> Tuple[datetime, datetime, int]:
-    starts = []
-    ends = []
-    for m in members:
-        s, e = _interval(m)
-        starts.append(s)
-        ends.append(e)
-    start = max(starts)
-    end = min(ends)
+    start, end = common_window(members)
     minutes = int((end - start).total_seconds() // 60)
     return start, end, minutes
 
@@ -917,16 +904,9 @@ def _ont_post_process_unmatched(
     # Helper function to check if two time windows overlap (quick check)
     def _time_windows_overlap(rider1: RiderLite, rider2: RiderLite) -> bool:
         """Quick check if two riders' time windows overlap."""
-        s1 = datetime.fromisoformat(f"{rider1.date}T{rider1.earliest_time}")
-        e1 = datetime.fromisoformat(f"{rider1.date}T{rider1.latest_time}")
-        if e1 < s1:
-            e1 += timedelta(days=1)
-        
-        s2 = datetime.fromisoformat(f"{rider2.date}T{rider2.earliest_time}")
-        e2 = datetime.fromisoformat(f"{rider2.date}T{rider2.latest_time}")
-        if e2 < s2:
-            e2 += timedelta(days=1)
-        
+        s1, e1 = _interval(rider1)
+        s2, e2 = _interval(rider2)
+
         # Overlap exists if latest_start < earliest_end
         latest_start = max(s1, s2)
         earliest_end = min(e1, e2)
@@ -935,15 +915,7 @@ def _ont_post_process_unmatched(
     # Helper function to compute group time window
     def _group_time_window(riders: List[RiderLite]) -> Tuple[datetime, datetime]:
         """Compute the time window for a group (earliest start, latest end)."""
-        starts, ends = [], []
-        for r in riders:
-            s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-            e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-            if e < s:
-                e += timedelta(days=1)
-            starts.append(s)
-            ends.append(e)
-        return max(starts), min(ends)
+        return common_window(riders)
     
     # Group unmatched by date
     unmatched_by_date: Dict[str, List[RiderLite]] = {}
@@ -1012,10 +984,7 @@ def _ont_post_process_unmatched(
                     continue
                 
                 # Pre-compute unmatched rider's time window
-                u_start = datetime.fromisoformat(f"{unmatched_rider.date}T{unmatched_rider.earliest_time}")
-                u_end = datetime.fromisoformat(f"{unmatched_rider.date}T{unmatched_rider.latest_time}")
-                if u_end < u_start:
-                    u_end += timedelta(days=1)
+                u_start, u_end = _interval(unmatched_rider)
                 
                 # Try each group of 4 on this date
                 for match_4, (group_start, group_end) in date_matches_with_windows:

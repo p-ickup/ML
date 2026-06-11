@@ -148,7 +148,7 @@ class TestMainPipelineTouchesSupabase(SupabaseIntegrationTestCase):
     def _assert_matches_for_flights(self, flight_ids: list[int], expected_count: int) -> list[dict]:
         rows = self._execute(
             self.sb.table("Matches")
-            .select("ride_id,flight_id,source,uber_type")
+            .select("ride_id,flight_id,source,uber_type,date,time,earliest_time,latest_time")
             .in_("flight_id", flight_ids),
             "select pipeline Matches",
         ).data or []
@@ -157,6 +157,44 @@ class TestMainPipelineTouchesSupabase(SupabaseIntegrationTestCase):
             if row.get("ride_id") is not None:
                 self.created_ride_ids.add(int(row["ride_id"]))
         return rows
+
+    def _assert_cross_midnight_pipeline_window(
+        self,
+        *,
+        label: str,
+        riders: list,
+        expected_date: str,
+        expected_time: str,
+        expected_earliest_time: str,
+        expected_latest_time: str,
+    ) -> None:
+        target = self._target(label)
+
+        self._run_pipeline_with_riders(
+            riders,
+            target=target,
+            TERMINAL_MODE="slack",
+            SAME_FLIGHT_PRIORITY=False,
+            patchers=[self._disable_connect_patch()],
+        )
+
+        status = self._algorithm_status_for_target(target)
+        self.assertEqual(status["status"], "success")
+        self.assertIsNone(status["error_message"])
+        run_id = self._track_run_id(status)
+
+        matching_run = self._matching_run(run_id)
+        self.assertIsNotNone(matching_run)
+        self.assertEqual(matching_run["status"], "committed")
+        self.assertEqual(matching_run["commit_result"]["groups_inserted"], 1)
+        self.assertEqual(matching_run["commit_result"]["matches_inserted"], len(riders))
+
+        matches = self._assert_matches_for_flights([r.flight_id for r in riders], len(riders))
+        self.assertEqual(len({row["ride_id"] for row in matches}), 1)
+        self.assertEqual({row["date"] for row in matches}, {expected_date})
+        self.assertEqual({row["time"] for row in matches}, {expected_time})
+        self.assertEqual({row["earliest_time"] for row in matches}, {expected_earliest_time})
+        self.assertEqual({row["latest_time"] for row in matches}, {expected_latest_time})
 
     def test_pipeline_success_with_matches_commits_and_marks_algorithm_status_success(self):
         target = self._target("pipeline-success")
@@ -202,6 +240,95 @@ class TestMainPipelineTouchesSupabase(SupabaseIntegrationTestCase):
         ).data or []
         self.assertTrue(all(row["matched"] for row in flights))
         self.assertTrue(all(not row["original_unmatched"] for row in flights))
+
+    def test_pipeline_cross_midnight_large_window_persists_normalized_match_window(self):
+        rider_a = self._create_pipeline_rider(
+            label="pipeline-cross-broad-a",
+            flight_offset=421,
+            date=self.PIPELINE_DATE,
+            earliest_time="22:00:00",
+            latest_time="03:00:00",
+            to_airport=True,
+        )
+        rider_b = self._create_pipeline_rider(
+            label="pipeline-cross-broad-b",
+            flight_offset=422,
+            date=self.PIPELINE_DATE,
+            earliest_time="23:00:00",
+            latest_time="02:30:00",
+            to_airport=True,
+        )
+
+        self._assert_cross_midnight_pipeline_window(
+            label="pipeline-cross-broad",
+            riders=[rider_a, rider_b],
+            expected_date="2099-01-16",
+            expected_time="02:15:00",
+            expected_earliest_time="23:00:00",
+            expected_latest_time="02:30:00",
+        )
+
+    def test_pipeline_cross_midnight_tight_window_persists_normalized_match_window(self):
+        rider_a = self._create_pipeline_rider(
+            label="pipeline-cross-tight-a",
+            flight_offset=431,
+            date=self.PIPELINE_DATE,
+            earliest_time="23:45:00",
+            latest_time="00:30:00",
+            to_airport=True,
+        )
+        rider_b = self._create_pipeline_rider(
+            label="pipeline-cross-tight-b",
+            flight_offset=432,
+            date=self.PIPELINE_DATE,
+            earliest_time="23:55:00",
+            latest_time="00:20:00",
+            to_airport=True,
+        )
+
+        self._assert_cross_midnight_pipeline_window(
+            label="pipeline-cross-tight",
+            riders=[rider_a, rider_b],
+            expected_date="2099-01-16",
+            expected_time="00:05:00",
+            expected_earliest_time="23:55:00",
+            expected_latest_time="00:20:00",
+        )
+
+    def test_pipeline_cross_midnight_three_person_mixed_window_persists_normalized_match_window(self):
+        rider_a = self._create_pipeline_rider(
+            label="pipeline-cross-mixed-a",
+            flight_offset=441,
+            date=self.PIPELINE_DATE,
+            earliest_time="22:30:00",
+            latest_time="02:30:00",
+            to_airport=True,
+        )
+        rider_b = self._create_pipeline_rider(
+            label="pipeline-cross-mixed-b",
+            flight_offset=442,
+            date=self.PIPELINE_DATE,
+            earliest_time="23:15:00",
+            latest_time="01:45:00",
+            to_airport=True,
+        )
+        rider_c = self._create_pipeline_rider(
+            label="pipeline-cross-mixed-c",
+            flight_offset=443,
+            date=self.PIPELINE_DATE,
+            earliest_time="23:40:00",
+            latest_time="01:10:00",
+            to_airport=True,
+        )
+
+        self._assert_cross_midnight_pipeline_window(
+            label="pipeline-cross-mixed",
+            riders=[rider_a, rider_b, rider_c],
+            expected_date="2099-01-16",
+            expected_time="00:55:00",
+            expected_earliest_time="23:40:00",
+            expected_latest_time="01:10:00",
+        )
 
     def test_pipeline_no_candidate_riders_marks_success_without_commit(self):
         target = self._target("pipeline-empty")

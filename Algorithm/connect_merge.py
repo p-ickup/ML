@@ -13,6 +13,7 @@ import connect_policy as cp
 from rider_data import RiderLite, normalize_airport
 from ruleMatching import Match, _group_to_match, _interval
 from supabase import Client
+from time_windows import common_window_or_none
 
 
 def _as_date_string(value: Any) -> str:
@@ -37,18 +38,7 @@ def _as_time_string(value: Any) -> str:
 
 
 def _common_window_riders(riders: Sequence[RiderLite]) -> Optional[Tuple[Any, Any]]:
-    if not riders:
-        return None
-    starts, ends = [], []
-    for r in riders:
-        s, e = _interval(r)
-        starts.append(s)
-        ends.append(e)
-    latest_start = max(starts)
-    earliest_end = min(ends)
-    if latest_start > earliest_end:
-        return None
-    return latest_start, earliest_end
+    return common_window_or_none(riders, allow_touching=True)
 
 
 def _fetch_rides_in_range(sb: Client, start_date: str, end_date: str) -> Dict[int, Dict[str, Any]]:

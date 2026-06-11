@@ -88,6 +88,34 @@ class TestBuildMatchingCommitPayload(unittest.TestCase):
         self.assertEqual(earliest_time, "23:30:00")
         self.assertEqual(latest_time, "01:00:00")
 
+    def test_payload_members_use_cross_midnight_group_window(self):
+        with patch_config(COVERED_DATES_EXPLICIT=False):
+            riders = [
+                make_rider(1, date="2026-05-12", earliest_time="22:30:00", latest_time="02:30:00"),
+                make_rider(2, date="2026-05-12", earliest_time="23:15:00", latest_time="01:45:00"),
+                make_rider(3, date="2026-05-12", earliest_time="23:40:00", latest_time="01:10:00"),
+            ]
+            for idx, rider in enumerate(riders, start=1):
+                rider.user_id = f"00000000-0000-0000-0000-00000000000{idx}"
+            match = Match(
+                riders=riders,
+                suggested_time_iso="2026-05-13T00:55:00",
+                terminal="1",
+            )
+
+            payload = commit_payload.build_matching_commit_payload(
+                run_id="11111111-1111-1111-1111-111111111111",
+                matches=[match],
+                all_riders=riders,
+                connect_for_cleanup=[],
+            )
+
+        members = payload["groups"][0]["members"]
+        self.assertEqual({member["earliest_time"] for member in members}, {"23:40:00"})
+        self.assertEqual({member["latest_time"] for member in members}, {"01:10:00"})
+        self.assertEqual({member["date"] for member in members}, {"2026-05-13"})
+        self.assertEqual({member["time"] for member in members}, {"00:55:00"})
+
 
 class TestCommitMatchingRun(unittest.TestCase):
     def _payload(self):

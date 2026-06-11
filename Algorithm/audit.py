@@ -6,13 +6,12 @@ from typing import Dict, List, Optional, Tuple
 
 import config as config
 from rider_data import RiderLite
+from time_windows import rider_interval
 
 
 # parse a rider window
 def _interval(r: RiderLite) -> Tuple[datetime, datetime]:
-    s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-    e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-    return s, e
+    return rider_interval(r)
 
 # bags for rider
 def _bags_for(r: RiderLite) -> int:

@@ -7,9 +7,9 @@ review of remediation work requested to be completed no later than June 19,
 
 ## ASPC Written Notice Summary
 
-Remediation work has been completed for the production atomicity issue, and the
-Supabase side-effect integration test remediation is in progress. The main
-change so far is that ML production writes now go through one transactional
+Remediation work has been completed for the production atomicity, Supabase
+side-effect integration test, and cross-midnight output-window issues. The main
+change is that ML production writes now go through one transactional
 Supabase RPC instead of separate client-side ride, match, flight, voucher, and
 Connect cleanup writes. Voucher state now lives in `public."Vouchers"`, commit
 runs are tracked for idempotency, and live DB integration tests verify the core
@@ -78,7 +78,6 @@ The production path now makes one validated commit request to a transactional Su
 - `tests/integration_supabase_base.py` - shared live Supabase test setup and cleanup helpers.
 - `tests/integration_supabase_commit.py` - live DB coverage for voucher import and direct commit RPC side effects.
 - `tests/integration_supabase_pipeline.py` - live DB coverage for `AlgorithmStatus` and `main.run(...)` lifecycle side effects.
-- `remediations.md` - this written remediation record.
 
 **Updated files:**
 
@@ -132,12 +131,12 @@ python3 -m py_compile Algorithm/*.py tests/integration_supabase*.py
 
 - `python3 -m unittest discover -s tests -t .`
   - Result: passed
-  - Tests run: 69
+  - Tests run: 78
   - Skipped: 0
 - `python3 -m unittest tests.integration_supabase`
   - Result: passed
-  - Tests run: 15
-  - Verified live DB voucher import, transactional commit success, `Rides` inserts, `Matches` inserts, `Flights` matched/unmatched updates, voucher consumption/audit fields, `MatchingRuns` ledger updates, idempotent replay, rollback on mid-commit DB failure, Connect cleanup, direct `AlgorithmStatus` behavior, and `main.run(...)` lifecycle success/failure scenarios.
+  - Tests run: 18
+  - Verified live DB voucher import, transactional commit success, `Rides` inserts, `Matches` inserts, `Flights` matched/unmatched updates, voucher consumption/audit fields, `MatchingRuns` ledger updates, idempotent replay, rollback on mid-commit DB failure, Connect cleanup, direct `AlgorithmStatus` behavior, `main.run(...)` lifecycle success/failure scenarios, and persisted cross-midnight `Matches` windows.
 - `python3 Algorithm/import_vouchers.py vouchers/SpringBreak.csv`
   - Result: passed
   - Validated rows: 4,400
@@ -175,7 +174,7 @@ Live Supabase integration coverage has been added for the exact side effects nam
 - The suite verifies `TestImport.csv` import into `public."Vouchers"`.
 - The suite verifies `commit_matching_run` inserts `Rides`, inserts `Matches`, updates matched and unmatched `Flights`, consumes vouchers, writes `MatchingRuns`, supports idempotent replay, rolls back on mid-commit failure, and performs Connect cleanup.
 - The suite verifies direct `AlgorithmStatus` behavior: creating a running row, reusing a due scheduled row, marking success, and marking failure with an error message.
-- The suite verifies `main.run(...)` production behavior for a normal match run, no candidate riders, one rider with no match, Connect enabled without cleanup, Connect merge replacing an existing match/ride, failure before commit, and failure during commit.
+- The suite verifies `main.run(...)` production behavior for a normal match run, no candidate riders, one rider with no match, Connect enabled without cleanup, Connect merge replacing an existing match/ride, failure before commit, failure during commit, and persisted `Matches` windows for broad, tight, and three-person cross-midnight groups.
 - Failure tests verify `AlgorithmStatus.failed`, `error_message`, absence of unexpected production side effects, and RPC rollback of partial ride/match writes.
 - Unit coverage verifies commit payload validation, retry behavior, voucher CSV parsing/import mapping, matching logic, Connect policy, bucket behavior, and dry-run voucher assignment.
 
@@ -197,11 +196,11 @@ python3 -m unittest tests.integration_supabase
 
 - `python3 -m unittest tests.integration_supabase`
   - Result: passed
-  - Tests run: 15
-  - Current DB coverage: voucher import, direct `AlgorithmStatus` behavior, `main.run(...)` production lifecycle success/no-rider/no-match/Connect/failure scenarios, transactional commit success, idempotent replay, rollback on DB failure, and Connect cleanup.
+  - Tests run: 18
+  - Current DB coverage: voucher import, direct `AlgorithmStatus` behavior, `main.run(...)` production lifecycle success/no-rider/no-match/Connect/failure scenarios, transactional commit success, idempotent replay, rollback on DB failure, Connect cleanup, and persisted cross-midnight `Matches` windows.
 - `python3 -m unittest discover -s tests -t .`
   - Result: passed
-  - Tests run: 69
+  - Tests run: 78
 
 **Supporting documentation updated:**
 
@@ -213,15 +212,31 @@ python3 -m unittest tests.integration_supabase
 
 **Audit item:** Cross-midnight output windows can be wrong.
 
-**Status:** Not started
+**Status:** Completed
 
-**Remediation completed:** None yet.
+**Summary:** Cross-midnight group windows now use the same rule for matching, dry-run CSV output, and production DB writes: if `latest_time` is earlier than `earliest_time`, the end time is treated as the next day. This keeps persisted group windows consistent with the matcher.
 
-**Supporting documentation:** None yet.
+**Remediation completed:**
+- Added a shared normalized group-window helper used by matching output and production payload construction.
+- Verified dry-run CSV output and production `Matches` rows persist the normalized cross-midnight overlap.
+- Added live Supabase coverage for three production-path cases: a broad two-rider overnight window, a tight two-rider overnight window, and a mixed three-rider overnight group.
 
-**Test results:** None yet.
+**Supporting documentation:** This section documents the canonical cross-midnight rule. The integration tests verify the rule in real `Matches` rows written through `main.run(...)`.
 
-**Repository updates:** None yet.
+**Test results:**
+- `python3 -m unittest tests.test_time_windows tests.test_rule_matching tests.test_commit_payload tests.test_main_csv` - 34 targeted cross-midnight unit tests passed.
+- `python3 -m unittest tests.integration_supabase` - 18 tests passed.
+- `python3 -m unittest discover -s tests -t .` - 78 tests passed.
+
+**Repository updates:**
+- `Algorithm/time_windows.py`
+- `Algorithm/ruleMatching.py`
+- `Algorithm/commit_payload.py`
+- `tests/test_time_windows.py`
+- `tests/test_rule_matching.py`
+- `tests/test_commit_payload.py`
+- `tests/test_main_csv.py`
+- `tests/integration_supabase_pipeline.py`
 
 ## Remediation Issue #4
 
