@@ -25,6 +25,7 @@ ML/
 ```
 
 Run unit tests from the repo root: `python3 -m unittest discover -s tests -t .`.
+Run lint checks from the repo root: `python3 -m ruff check .`.
 Run live Supabase integration tests explicitly: `python3 -m unittest tests.integration_supabase`
 (see [Operations → Tests](operations.md#tests)). The integration suite touches
 the configured Supabase database and covers voucher import, `AlgorithmStatus`,
@@ -33,8 +34,6 @@ success and failure lifecycle scenarios.
 Integration helpers live in `tests/integration_supabase_base.py`; direct RPC
 coverage lives in `tests/integration_supabase_commit.py`; pipeline lifecycle
 coverage lives in `tests/integration_supabase_pipeline.py`.
-
-**Not used for current pipeline:** root `Dockerfile` targets a legacy `MLapi` web app. Run `python3 main.py` directly.
 
 ---
 

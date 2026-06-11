@@ -265,3 +265,38 @@ python3 -m unittest tests.integration_supabase
 **Test results:** None yet.
 
 **Repository updates:** None yet.
+
+## Remediation Issue #12
+
+**Audit item:** Unused or stale components
+
+**Status:** Completed
+
+**Summary:** The ML repo was cleaned up so production code and tracked files better match the batch pipeline that is actually maintained. Stale local artifacts and the obsolete web-API Docker entrypoint were removed, dead/commented matching code was trimmed, and Ruff was added as the Python lint gate for unused imports, unused locals, unused production arguments, and syntax-level issues. The TypeScript/provider portions of the audit item do not apply to this Python-only ML repo.
+
+**Remediation completed:**
+- Removed tracked local/cache artifacts, including `.DS_Store`, Python bytecode caches, and editor workspace settings.
+- Removed the stale Dockerfile for the old `MLapi` web entrypoint; the current ML repo runs as a Python batch pipeline.
+- Removed stale commented/debug code and unused helper/local code from active matching and audit modules.
+- Added Ruff configuration and documented `python3 -m ruff check .` as the repo lint command.
+
+**Supporting documentation:** README, operations, and code guide now document the current batch pipeline and Ruff lint command.
+
+**Test results:**
+- Dependency import verification passed for `pandas`, `python-dotenv`, `supabase`, and `ruff`.
+- `python3 -m unittest tests.test_rule_matching tests.test_audit tests.test_main_csv` - 30 targeted tests passed.
+- `python3 -m unittest discover -s tests -t .` - 78 local tests passed.
+- `python3 -m ruff check .` - passed.
+
+**Repository updates:**
+- `.gitignore`
+- `Dockerfile` removed
+- `.vscode/settings.json` removed from version control
+- `pyproject.toml`
+- `requirements.txt`
+- `Algorithm/main.py`
+- `Algorithm/audit.py`
+- `Algorithm/ruleMatching.py`
+- `README.md`
+- `documentation/operations.md`
+- `documentation/code-guide.md`

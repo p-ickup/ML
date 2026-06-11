@@ -51,18 +51,7 @@ def _write_matches_csv(
     Write matches to a CSV (one row per matched ride group).
     Also prints how many flights were matched vs unmatched.
     """
-    
-    # print("\n================= DEBUG: GROUPS AT CSV WRITE =================")
-    # for idx, m in enumerate(matches, start=1):
-    #     print(f"[CSV {idx}] bucket={m.bucket_key}, size={len(m.riders)}")
-    #     for r in m.riders:
-    #         print(
-    #             f"   flight_id={r.flight_id}, user_id={r.user_id}, "
-    #             f"school={r.school}, subsidized={r.subsidized}, id={id(r)}"
-    #         )
-    # print("===============================================================\n")
-    
-    
+
     if not matches:
         print("No matches to write.")
         return
@@ -70,12 +59,7 @@ def _write_matches_csv(
     rows = []
     for idx, m in enumerate(matches, start=1):
         sim_ride_id = idx
-        
-        # # DEBUG BLOCK
-        # print(f"\n[CSV WRITE — GROUP {sim_ride_id}] "
-        #     f"bucket={m.bucket_key}, size={len(m.riders)}, "
-        #     f"airport={m.riders[0].airport if m.riders else None}")
-        
+
         match_date, _ = match_datetime_from_earliest(m)
         earliest_time, latest_time = compute_group_time_window(m.riders)
 

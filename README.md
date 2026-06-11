@@ -26,6 +26,12 @@ Run tests (stdlib `unittest`, no extra deps) from the repo root:
 python3 -m unittest discover -s tests -t .
 ```
 
+Run lint checks from the repo root:
+
+```bash
+python3 -m ruff check .
+```
+
 Run live Supabase integration tests from the repo root:
 
 ```bash
@@ -97,5 +103,3 @@ requirements.txt
 | Resource | Use |
 |----------|-----|
 | [SBOM.spdx](SBOM.spdx) | Dependency inventory + licenses (SPDX, FOSSA-generated) |
-
-**Note:** Root `Dockerfile` targets a legacy web API, not this batch pipeline. Use `python3 main.py` directly.

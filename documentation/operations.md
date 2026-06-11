@@ -241,6 +241,12 @@ The suite uses Python's built-in `unittest` — **no extra dependencies** beyond
 python3 -m unittest discover -s tests -t .
 ```
 
+Run lint checks from the **repository root**:
+
+```bash
+python3 -m ruff check .
+```
+
 Verbose, or a single module/case:
 
 ```bash

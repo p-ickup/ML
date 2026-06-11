@@ -1,4 +1,7 @@
-# main.py pipeline (python3 main.py)
+# Runtime dependencies
 pandas
 python-dotenv
 supabase
+
+# Local checks
+ruff
