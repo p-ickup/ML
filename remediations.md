@@ -266,6 +266,29 @@ python3 -m unittest tests.integration_supabase
 
 **Repository updates:** None yet.
 
+## Remediation Issue #11
+
+**Audit item:** CI Does Not Provide Strong Release Assurance
+
+**Status:** Completed for ML-equivalent scope
+
+**Summary:** Although issue #11 was in reference to frontend release assurance, the ML repo now has a lightweight CI gate appropriate for this Python batch pipeline. Pull requests and pushes to `main` or `remediation` install dependencies, run Ruff, and run the local unit test suite. Build and TypeScript checks are not applicable to this Python-only repository.
+
+**Remediation completed:**
+- Added a GitHub Actions workflow for the ML repo.
+- CI installs `requirements.txt`.
+- CI runs `python -m ruff check .`.
+- CI runs `python -m unittest discover -s tests -t .`.
+
+**Supporting documentation:** The workflow itself documents the enforced ML checks.
+
+**Test results:**
+- `python3 -m ruff check .` - passed locally.
+- `python3 -m unittest discover -s tests -t .` - 78 local tests passed.
+
+**Repository updates:**
+- `.github/workflows/ci.yml`
+
 ## Remediation Issue #12
 
 **Audit item:** Unused or stale components
