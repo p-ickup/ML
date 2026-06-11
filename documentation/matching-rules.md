@@ -124,23 +124,23 @@ COVERED_DATES_INBOUND = ["03-20", "03-21", "03-22"]
 
 ## Vouchers
 
-`vouchers.assign_vouchers()` runs after subsidy.
+Production voucher assignment runs inside the `commit_matching_run` RPC after subsidy eligibility is included in the commit payload. Dry-run output may still use `vouchers.assign_vouchers()` against a `.dryrun.csv` copy for review.
 
 | Rule | Detail |
 |------|--------|
 | Connect | No vouchers |
 | Group voucher | Subsidized + covered groups only |
 | Contingency | Inbound subsidized covered groups |
-| Pool | Local CSV via `--vouchers` |
-| Dry-run | Uses `.dryrun.csv` copy; does not consume real pool |
+| Pool | Production uses `public."Vouchers"` |
+| Dry-run | Uses local CSV `.dryrun.csv` copy; does not consume production vouchers |
 
-CSV columns: see [Schema → Voucher CSV](schema.md#voucher-csv).
+CSV columns for dry-run/import compatibility: see [Schema → Voucher CSV](schema.md#voucher-csv).
 
 ---
 
 ## Uber vehicle sizing
 
-For non-Connect groups, `main._determine_uber_type()` maps group size + bag units to `X`, `XL`, or `XXL`. Hard limits: 12 bag units for groups of 2–3; 10 for 4+.
+For non-Connect groups, `commit_payload.determine_uber_type()` maps group size + bag units to `X`, `XL`, or `XXL`. Hard limits: 12 bag units for groups of 2–3; 10 for 4+.
 
 ---
 

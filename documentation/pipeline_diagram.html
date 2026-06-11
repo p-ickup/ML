@@ -428,7 +428,7 @@
       config: "Limits, CONNECT_*, covered dates. Read by modules (not fetched over the network).",
       main: "Entry point: orchestrates every stage below.",
       rider_data: "fetch_riders(): queries Supabase Flights + Users → RiderLite list.",
-      supabase_in: "External DB. Read at start; written at end (Rides, Matches, Flights.matched).",
+      supabase_in: "External DB. Read at start; production commits through commit_matching_run.",
       algorithmStatus: "Production only: records run scope and success/failure on AlgorithmStatus table.",
       buckets: "make_buckets(): splits RiderLite list by direction + airport + school.",
       ruleMatching: "match_bucket(): builds groups of 2–5 per bucket.",
@@ -439,10 +439,10 @@
       connect_merge: "merge_connect_with_existing(): pulls existing Rides from DB + merges with this run.",
       refresh_times: "refresh_match_suggested_times(): sets suggested_time_iso per group.",
       subsidy: "apply_group_subsidy(): LAX≥3, ONT≥2, Pomona, covered dates.",
-      vouchers: "assign_vouchers(): reads voucher pool, links codes to groups.",
-      voucher_csv: "Local voucher pool (e.g. Summer.csv).",
+      vouchers: "assign_vouchers(): dry-run only; reads local voucher pool for review output.",
+      voucher_csv: "Local dry-run voucher pool (e.g. Summer.csv).",
       out_csv: "Dry-run output: matches_dryrun.csv + unmatched_reasons_dryrun.csv.",
-      out_db: "Production: insert Rides/Matches, update Flights, cleanup absorbed rides.",
+      out_db: "Production: transactional RPC inserts rides/matches, updates flights, consumes vouchers, and cleans absorbed rides.",
     };
 
     /**
@@ -520,9 +520,9 @@
         orchestrator: "main.py",
         solo: { id: "subsidy", name: "main.py", hint: "apply_group_subsidy", kind: "core" },
         edges: [
-          { type: "pull", verb: "read pool", from: { id: "voucher_csv", name: "vouchers/*.csv", hint: "local CSV", kind: "ext" }, to: { id: "vouchers", name: "vouchers.py", hint: "assign_vouchers", kind: "io" } },
+          { type: "pull", verb: "dry-run pool", from: { id: "voucher_csv", name: "vouchers/*.csv", hint: "local CSV", kind: "ext" }, to: { id: "vouchers", name: "vouchers.py", hint: "assign_vouchers", kind: "io" } },
         ],
-        output: "group_subsidy + voucher fields on riders",
+        output: "group_subsidy; dry-run voucher fields for review",
         helpers: [{ id: "config", name: "config.py", kind: "config" }],
       },
       {
@@ -530,7 +530,7 @@
         orchestrator: "main.py writes",
         edges: [
           { type: "push", verb: "write csv", from: { id: "main", name: "main.py", hint: "dry-run", kind: "core" }, to: { id: "out_csv", name: "matches/*.csv", hint: "dry-run", kind: "ext" } },
-          { type: "push", verb: "write db", from: { id: "main", name: "main.py", hint: "production", kind: "core" }, to: { id: "out_db", name: "Supabase", hint: "Rides + Matches", kind: "ext" } },
+          { type: "push", verb: "commit rpc", from: { id: "main", name: "main.py", hint: "production", kind: "core" }, to: { id: "out_db", name: "Supabase", hint: "commit_matching_run", kind: "ext" } },
         ],
         output: null,
         helpers: [],

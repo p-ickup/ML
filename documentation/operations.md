@@ -5,8 +5,11 @@ How to install, run, verify, and troubleshoot the matching pipeline.
 ## Prerequisites
 
 - Python 3.9+ (3.11+ recommended; repo tested on 3.13)
-- Supabase credentials with read/write access to `Flights`, `Users`, `Rides`, `Matches`, `AlgorithmStatus`
-- Voucher CSV for the break (under `vouchers/`)
+- Supabase credentials with service-role access for the transactional commit RPC
+- Applied SQL from `documentation/sql/001_commit_matching_run.sql`
+- Applied integrity safeguards from `documentation/sql/002_integrity_safeguards.sql` after diagnostics are clean
+- Voucher rows imported into `public."Vouchers"` for production voucher assignment
+- Voucher CSV for dry-run review output, if reviewing vouchers locally
 
 ---
 
@@ -62,9 +65,9 @@ Interactive flow: [pipeline_diagram.html](pipeline_diagram.html).
 | Goal | Command |
 |------|---------|
 | Dry-run (default for review) | `python3 main.py --dry-run --days-ahead 20 --vouchers ../vouchers/Summer.csv` |
-| Production | `python3 main.py --days-ahead 20 --vouchers ../vouchers/Summer.csv` |
+| Production | `python3 main.py --days-ahead 20` |
 | Include today in window | add `--days-ahead-start 0` |
-| Custom CSV path | `--csv ../matches/my_review.csv` |
+| Custom dry-run CSV path | `--csv ../matches/my_review.csv` |
 
 ### Example: break prep (30-day window)
 
@@ -81,11 +84,11 @@ Review CSVs → fix config if needed → re dry-run → production without `--dr
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--dry-run` | off | No `Rides`/`Matches` writes; voucher `.dryrun` copy |
-| `--csv PATH` | `../matches/matches_dryrun.csv` | Matched groups CSV |
+| `--dry-run` | off | No production writes; writes review CSVs and voucher `.dryrun` copy |
+| `--csv PATH` | `../matches/matches_dryrun.csv` | Dry-run matched groups CSV |
 | `--days-ahead N` | `10` | Flights with `date` ≤ today + N |
 | `--days-ahead-start N` | *(omit)* | Flights with `date` ≥ today + N. Omit = exclude today. Use `0` for today |
-| `--vouchers PATH` | `../vouchers/Thanksgiving.csv` | Voucher pool |
+| `--vouchers PATH` | `../vouchers/Thanksgiving.csv` | Dry-run voucher CSV pool |
 
 `--days-ahead-start` must be ≤ `--days-ahead`.
 
@@ -98,17 +101,19 @@ Review CSVs → fix config if needed → re dry-run → production without `--dr
 | Read `Flights` / `Users` | Yes | Yes |
 | Write `Rides` / `Matches` | **No** | **Yes** |
 | Update `Flights.matched` | **No** | **Yes** |
-| Voucher file | `*.dryrun.csv` copy | Updates local `--vouchers` CSV |
+| Voucher source | Local CSV `*.dryrun.csv` copy | `public."Vouchers"` table |
 | `AlgorithmStatus` | Skipped | Updated |
-| CSV output | Yes | Yes |
+| CSV output | Yes | No |
 
 **Production side effects:**
 
-- Inserts `Rides` and `Matches`  
-- Sets matched flights to `matched=true`  
-- Marks still-unmatched flights `matched=false`, `original_unmatched=true`  
-- May delete rides absorbed into Connect merge  
-- Consumes vouchers from the local CSV passed via `--vouchers`  
+- Calls `commit_matching_run` once with a validated payload
+- Inserts `Rides` and `Matches`
+- Sets matched flights to `matched=true`
+- Marks still-unmatched flights `matched=false`, `original_unmatched=true`
+- Cleans up rides absorbed into Connect merge
+- Consumes vouchers from `public."Vouchers"`
+- Records the commit in `public."MatchingRuns"` for idempotent retries
 
 ---
 
@@ -118,7 +123,8 @@ Review CSVs → fix config if needed → re dry-run → production without `--dr
 - [ ] `matches_dryrun.csv` reviewed (group sizes, times, airports)  
 - [ ] Subsidy and vouchers look correct for covered dates  
 - [ ] `config.py` has correct `COVERED_DATES_*` and `CONNECT_*` for this break  
-- [ ] Voucher CSV has enough unused rows for expected subsidized groups  
+- [ ] `public."Vouchers"` has enough unused rows for expected subsidized groups
+- [ ] `commit_matching_run` and integrity safeguard SQL have been applied
 - [ ] Stakeholders signed off on unmatched count  
 
 ---
@@ -144,8 +150,8 @@ After config changes, always re dry-run.
 
 | Path | When |
 |------|------|
-| `matches/matches_dryrun.csv` | Every run (unless `--csv` overrides) |
-| `matches/unmatched_reasons_dryrun.csv` | When there are unmatched riders |
+| `matches/matches_dryrun.csv` | Dry-run only, unless `--csv` overrides |
+| `matches/unmatched_reasons_dryrun.csv` | Dry-run only, when there are unmatched riders |
 | `vouchers/<name>.dryrun.csv` | Dry-run only |
 
 Column definitions: [Schema → CSV outputs](schema.md#local-csv-outputs).
@@ -159,7 +165,8 @@ Column definitions: [Schema → CSV outputs](schema.md#local-csv-outputs).
 | `Fetched 0 rider forms` | Narrow date window or all flights matched | Widen `--days-ahead`; check `Flights.matched` in Supabase |
 | Many `no_time_overlap` | Sparse or incompatible windows | Normal for low volume; verify form times in DB |
 | Many `singleton_bucket` | Only one rider in bucket | Need more signups for that airport/day |
-| No vouchers assigned | Not subsidized, wrong date, or Connect | Check `subsidized` column + `COVERED_DATES_*` |
+| No vouchers assigned in dry-run | Not subsidized, wrong date, or Connect | Check `subsidized` column + `COVERED_DATES_*` |
+| No vouchers assigned in production | No eligible unused row in `public."Vouchers"` | Check airport/direction/date/contingency fields in `Vouchers` |
 | Connect groups missing | Connect disabled or below min size | Check `CONNECT_*` in config |
 | Pickup times look wrong | Group changed after Connect merge | Times refreshed post-merge; check `suggested_time` in CSV |
 | Production error mid-run | Supabase / data issue | Read console + `AlgorithmStatus.error_message`; dry-run again |
@@ -170,9 +177,58 @@ Column definitions: [Schema → CSV outputs](schema.md#local-csv-outputs).
 
 ## Voucher and CSV files
 
-- Vouchers: `--vouchers ../vouchers/YourBreak.csv`  
-- Dry-run: writes `*.dryrun.csv` copy; does not touch the source pool  
-- Production: updates the local voucher CSV you passed  
+- Dry-run vouchers: `--vouchers ../vouchers/YourBreak.csv`
+- Dry-run writes a `*.dryrun.csv` copy; it does not touch the source pool
+- Production vouchers come from `public."Vouchers"` inside the `commit_matching_run` RPC
+
+### Import vouchers into Supabase
+
+Validate a voucher CSV without writing to Supabase:
+
+```bash
+python3 Algorithm/import_vouchers.py vouchers/SpringBreak.csv
+```
+
+Expected output:
+
+```text
+Validated 4400 voucher rows for public.Vouchers.
+Dry run only. Re-run with --commit to write to Supabase.
+```
+
+Commit the import:
+
+```bash
+python3 Algorithm/import_vouchers.py vouchers/SpringBreak.csv --commit
+```
+
+The importer validates required columns, normalizes airport codes, maps rows to
+`public."Vouchers"`, and inserts only voucher links that do not already exist.
+Existing voucher rows are left untouched so re-importing a CSV cannot reset
+`used`, assignment, or audit fields. Newly imported vouchers are marked
+available; production consumption is recorded later by `commit_matching_run`.
+
+### Test Supabase integration writes
+
+`tests/integration_supabase.py` is the DB-touching integration suite entrypoint.
+It keeps the command below stable while loading focused tests from
+`tests/integration_supabase_commit.py` and
+`tests/integration_supabase_pipeline.py`. Shared live DB setup and cleanup live
+in `tests/integration_supabase_base.py`.
+
+The suite uses `vouchers/TestImport.csv` and temporary
+auth/users/flights/vouchers/rides/matches rows to verify the production write
+path, `AlgorithmStatus`, rollback behavior, and selected `main.run(...)`
+production lifecycle success and failure scenarios.
+
+```bash
+python3 -m unittest tests.integration_supabase
+```
+
+This suite does not skip. It fails clearly if `.env` is missing Supabase
+credentials, the service key cannot create temporary auth users, or the required
+RPC/schema changes have not been applied. Successful runs clean up the rows they
+created.
 
 ---
 
@@ -203,11 +259,24 @@ What is covered (pure logic, no Supabase needed):
 | `test_audit.py` | unmatched block reasons |
 | `test_rule_matching.py` | overlap, validity, pickup time, `match_bucket` |
 | `test_vouchers.py` | parsing, coverage, assignment, dry-run copy |
+| `test_commit_payload.py` | commit payload invariants, RPC retry wrapper |
+| `test_import_vouchers.py` | voucher CSV validation and missing-row insert mapping |
+
+DB integration coverage, run explicitly:
+
+```bash
+python3 -m unittest tests.integration_supabase
+```
+
+| Test module | Live DB behavior covered |
+|-------------|--------------------------|
+| `tests.integration_supabase` | `TestImport.csv` import into `Vouchers`; direct `AlgorithmStatus` create/reuse/success/failure updates; `main.run(...)` success, no-rider, no-match, Connect no-merge, Connect merge, pre-commit failure, and commit-time failure scenarios; `commit_matching_run` ride/match insert; flight matched/unmatched updates; voucher consumption/audit fields; idempotent replay; rollback on mid-commit failure; Connect cleanup deleting old matches/rides |
 
 `tests/helpers.py` adds `Algorithm/` to the path, builds `RiderLite` fixtures,
 and provides a `patch_config(...)` context manager for temporary config
-overrides. The suite deliberately does not import `main.py` (it builds a
-Supabase client at import time), so tests run without credentials or network.
+overrides. The unit suite deliberately does not import `main.py` (it builds a
+Supabase client at import time), so unit tests run without credentials or
+network.
 
 ---
 

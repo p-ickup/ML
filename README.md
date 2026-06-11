@@ -1,6 +1,6 @@
 # Pickup Matching Pipeline
 
-Batch job that groups Pomona students into shared airport rides. Reads unmatched flight signups from Supabase, forms Uber groups (2–5) and optional Connect shuttles (6–24), applies subsidy and vouchers, writes CSV or persists to the database.
+Batch job that groups Pomona students into shared airport rides. Reads unmatched flight signups from Supabase, forms Uber groups (2–5) and optional Connect shuttles (6–24), applies subsidy, writes dry-run review CSVs, or commits production results through a transactional Supabase RPC.
 
 **Entry point:** `Algorithm/main.py`
 
@@ -25,6 +25,16 @@ Run tests (stdlib `unittest`, no extra deps) from the repo root:
 ```bash
 python3 -m unittest discover -s tests -t .
 ```
+
+Run live Supabase integration tests from the repo root:
+
+```bash
+python3 -m unittest tests.integration_supabase
+```
+
+This command touches the configured Supabase database and covers voucher import,
+`AlgorithmStatus`, production commit side effects, rollback, and selected
+`main.run(...)` success and failure lifecycle scenarios.
 
 ---
 
@@ -54,7 +64,7 @@ Run from **`Algorithm/`**:
 python3 main.py --dry-run --days-ahead 20 --vouchers ../vouchers/Summer.csv
 
 # Production
-python3 main.py --days-ahead 20 --vouchers ../vouchers/Summer.csv
+python3 main.py --days-ahead 20
 ```
 
 | Flag | Purpose |
@@ -62,8 +72,8 @@ python3 main.py --days-ahead 20 --vouchers ../vouchers/Summer.csv
 | `--dry-run` | No DB writes; voucher `.dryrun` copy |
 | `--days-ahead N` | Include flights through today + N days |
 | `--days-ahead-start N` | Start of window (use `0` to include today) |
-| `--vouchers PATH` | Voucher CSV |
-| `--csv PATH` | Output CSV path |
+| `--vouchers PATH` | Dry-run voucher CSV |
+| `--csv PATH` | Dry-run output CSV path |
 
 Details: [Operations](documentation/operations.md).
 
@@ -75,7 +85,7 @@ Details: [Operations](documentation/operations.md).
 Algorithm/        Pipeline code — run main.py from here
 documentation/    Onboarding docs + pipeline diagram
 matches/          Dry-run CSV output
-vouchers/         Voucher pools
+vouchers/         Dry-run/import voucher pools
 requirements.txt
 .env              Supabase credentials (not committed)
 ```
