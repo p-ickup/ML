@@ -131,16 +131,16 @@ class TestCommitMatchingRunTouchesSupabase(SupabaseIntegrationTestCase):
 
         flights = self._execute(
             self.sb.table("Flights")
-            .select("flight_id,matched,original_unmatched")
+            .select("flight_id,matching_status,original_unmatched")
             .in_("flight_id", [flight_a, flight_b, flight_unmatched]),
             "verify committed Flights",
         ).data or []
         by_flight = {row["flight_id"]: row for row in flights}
-        self.assertTrue(by_flight[flight_a]["matched"])
+        self.assertEqual(by_flight[flight_a]["matching_status"], "matched")
         self.assertFalse(by_flight[flight_a]["original_unmatched"])
-        self.assertTrue(by_flight[flight_b]["matched"])
+        self.assertEqual(by_flight[flight_b]["matching_status"], "matched")
         self.assertFalse(by_flight[flight_b]["original_unmatched"])
-        self.assertFalse(by_flight[flight_unmatched]["matched"])
+        self.assertEqual(by_flight[flight_unmatched]["matching_status"], "unmatched")
         self.assertTrue(by_flight[flight_unmatched]["original_unmatched"])
 
         vouchers = self._execute(
@@ -237,7 +237,7 @@ class TestCommitMatchingRunTouchesSupabase(SupabaseIntegrationTestCase):
         user = self._create_auth_user("connect")
         self._insert_user_profile(user, "connect")
         flight_id = self.flight_base + 301
-        self._insert_flight(flight_id=flight_id, user_id=user, matched=True)
+        self._insert_flight(flight_id=flight_id, user_id=user, matching_status="matched")
 
         old_ride = self._execute(
             self.sb.table("Rides").insert({"ride_date": "2026-03-22", "ride_type": None}),

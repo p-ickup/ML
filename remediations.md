@@ -256,15 +256,30 @@ python3 -m unittest tests.integration_supabase
 
 **Audit item:** Matching Lifecycle Has Gaps
 
-**Status:** Not started
+**Status:** Partially completed for ML-owned matching lifecycle
 
-**Remediation completed:** None yet.
+**Summary:** The ML repo now uses explicit `Flights.matching_status` values instead of the old `matched` null/false/true lifecycle. ML reads skip only `matching_status = 'matched'`, treats missing or unknown values defensively as `submitted`, and the transactional commit RPC writes `matched` or `unmatched` status values during production commits.
 
-**Supporting documentation:** None yet.
+**Remediation completed:**
+- Replaced ML reads of `Flights.matched` with `Flights.matching_status`.
+- Updated `RiderLite` and Connect merge rebuilding to carry `matching_status`.
+- Updated the commit RPC so matched flights are written as `matching_status = 'matched'` and still-unmatched flights as `matching_status = 'unmatched'`.
+- Updated integration tests and docs to verify the new status field.
 
-**Test results:** None yet.
+**Supporting documentation:** Schema, operations, glossary, code guide, and SQL RPC documentation now reference `matching_status`.
 
-**Repository updates:** None yet.
+**Test results:**
+- `python3 -m unittest discover -s tests -t .` - 80 local tests passed.
+- `python3 -m ruff check .` - passed.
+- `python3 -m unittest tests.integration_supabase` - 18 live Supabase tests passed.
+
+**Repository updates:**
+- `Algorithm/rider_data.py`
+- `Algorithm/connect_merge.py`
+- `documentation/sql/001_commit_matching_run.sql`
+- `tests/integration_supabase_base.py`
+- `tests/integration_supabase_commit.py`
+- `tests/integration_supabase_pipeline.py`
 
 ## Remediation Issue #11
 

@@ -36,7 +36,7 @@ def make_rider(
     flight_no=None,
     airline_iata=None,
     name=None,
-    matched=False,
+    matching_status="submitted",
 ) -> RiderLite:
     """Build a RiderLite with sensible defaults; override per test."""
     return RiderLite(
@@ -49,7 +49,7 @@ def make_rider(
         to_airport=to_airport,
         date=date,
         terminal=terminal,
-        matched=matched,
+        matching_status=matching_status,
         school=school,
         bags_no=bags_no,
         bags_no_large=bags_no_large,

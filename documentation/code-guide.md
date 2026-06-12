@@ -71,7 +71,7 @@ coverage lives in `tests/integration_supabase_pipeline.py`.
 
 **Does:**
 
-- `fetch_flights()` — date window + skip `matched = true`  
+- `fetch_flights()` — date window + skip `matching_status = 'matched'`
 - `fetch_users()` — school and name  
 - Normalizes airport and terminal strings  
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import connect_policy as cp
-from rider_data import RiderLite, normalize_airport
+from rider_data import RiderLite, normalize_airport, normalize_matching_status
 from ruleMatching import Match, _group_to_match, _interval
 from supabase import Client
 from time_windows import common_window_or_none
@@ -74,7 +74,7 @@ def _fetch_flights(sb: Client, flight_ids: Sequence[int]) -> Dict[int, Dict[str,
             sb.table("Flights")
             .select(
                 "flight_id,user_id,flight_no,airline_iata,airport,to_airport,date,"
-                "earliest_time,latest_time,matched,bag_no,bag_no_large,bag_no_personal,terminal"
+                "earliest_time,latest_time,matching_status,bag_no,bag_no_large,bag_no_personal,terminal"
             )
             .in_("flight_id", chunk)
             .execute()
@@ -120,7 +120,7 @@ def _flight_to_rider_lite(flight: Dict[str, Any], user_info: Dict[str, Dict[str,
         to_airport=bool(flight.get("to_airport")),
         date=_as_date_string(flight.get("date")),
         terminal=flight.get("terminal"),
-        matched=bool(flight.get("matched")),
+        matching_status=normalize_matching_status(flight.get("matching_status")),
         school=school,
         name=info.get("name"),
         bags_no=(int(flight["bag_no"]) if flight.get("bag_no") is not None else None),

@@ -234,11 +234,11 @@ class TestMainPipelineTouchesSupabase(SupabaseIntegrationTestCase):
 
         flights = self._execute(
             self.sb.table("Flights")
-            .select("flight_id,matched,original_unmatched")
+            .select("flight_id,matching_status,original_unmatched")
             .in_("flight_id", [rider_a.flight_id, rider_b.flight_id]),
             "verify pipeline matched Flights",
         ).data or []
-        self.assertTrue(all(row["matched"] for row in flights))
+        self.assertTrue(all(row["matching_status"] == "matched" for row in flights))
         self.assertTrue(all(not row["original_unmatched"] for row in flights))
 
     def test_pipeline_cross_midnight_large_window_persists_normalized_match_window(self):
@@ -373,11 +373,11 @@ class TestMainPipelineTouchesSupabase(SupabaseIntegrationTestCase):
 
         flight = self._execute(
             self.sb.table("Flights")
-            .select("matched,original_unmatched")
+            .select("matching_status,original_unmatched")
             .eq("flight_id", rider.flight_id),
             "verify pipeline unmatched Flight",
         ).data[0]
-        self.assertFalse(flight["matched"])
+        self.assertEqual(flight["matching_status"], "unmatched")
         self.assertTrue(flight["original_unmatched"])
 
     def test_pipeline_connect_enabled_no_merge_commits_without_cleanup(self):
@@ -423,7 +423,7 @@ class TestMainPipelineTouchesSupabase(SupabaseIntegrationTestCase):
         old_rider = self._create_pipeline_rider(
             label="pipeline-connect-old",
             flight_offset=701,
-            matched=True,
+            matching_status="matched",
             date=self.PIPELINE_DATE,
         )
         new_rider = self._create_pipeline_rider(
@@ -528,11 +528,11 @@ class TestMainPipelineTouchesSupabase(SupabaseIntegrationTestCase):
 
         flights = self._execute(
             self.sb.table("Flights")
-            .select("flight_id,matched,original_unmatched")
+            .select("flight_id,matching_status,original_unmatched")
             .in_("flight_id", [rider_a.flight_id, rider_b.flight_id]),
             "verify pre-commit failure Flights unchanged",
         ).data or []
-        self.assertTrue(all(not row["matched"] for row in flights))
+        self.assertTrue(all(row["matching_status"] == "submitted" for row in flights))
         self.assertTrue(all(not row["original_unmatched"] for row in flights))
 
     def test_pipeline_failure_during_commit_marks_failed_and_rpc_rolls_back(self):
@@ -601,9 +601,9 @@ class TestMainPipelineTouchesSupabase(SupabaseIntegrationTestCase):
 
         flight = self._execute(
             self.sb.table("Flights")
-            .select("matched,original_unmatched")
+            .select("matching_status,original_unmatched")
             .eq("flight_id", rider.flight_id),
             "verify commit failure Flight unchanged",
         ).data[0]
-        self.assertFalse(flight["matched"])
+        self.assertEqual(flight["matching_status"], "submitted")
         self.assertFalse(flight["original_unmatched"])

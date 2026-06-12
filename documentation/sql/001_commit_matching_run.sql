@@ -269,14 +269,14 @@ begin
 
   if cardinality(v_matched_flight_ids) > 0 then
     update public."Flights"
-    set matched = true,
+    set matching_status = 'matched',
         original_unmatched = false
     where flight_id = any(v_matched_flight_ids);
   end if;
 
   if cardinality(v_unmatched_flight_ids) > 0 then
     update public."Flights"
-    set matched = false,
+    set matching_status = 'unmatched',
         original_unmatched = true
     where flight_id = any(v_unmatched_flight_ids);
   end if;

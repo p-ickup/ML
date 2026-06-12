@@ -18,7 +18,7 @@ Built in `Algorithm/rider_data.py` from one `Flights` row + one `Users` row.
 | `terminal` | Flights | Normalized terminal code |
 | `school`, `name` | Users | Skipped if `school` is missing |
 | `bags_no`, `bags_no_large`, `bag_no_personal` | Flights | Bag counts |
-| `matched` | Flights | Carried through; pipeline input is unmatched only |
+| `matching_status` | Flights | `submitted`, `unmatched`, or `matched`; pipeline skips `matched` |
 | `subsidized` | Set later | Per-rider flag during subsidy pass |
 
 ## In-memory: `Match`
@@ -40,7 +40,7 @@ Built in `Algorithm/ruleMatching.py`; one object = one ride group.
 
 ### `Flights` (read + update)
 
-**Read** by `rider_data.fetch_flights()` for the CLI date window. Rows with `matched = true` are excluded client-side.
+**Read** by `rider_data.fetch_flights()` for the CLI date window. Rows with `matching_status = 'matched'` are excluded client-side.
 
 | Field (used) | Role |
 |--------------|------|
@@ -51,14 +51,14 @@ Built in `Algorithm/ruleMatching.py`; one object = one ride group.
 | `airport`, `to_airport`, `terminal` | Bucketing + rules |
 | `flight_no`, `airline_iata` | Same-flight priority |
 | `bag_no`, `bag_no_large`, `bag_no_personal` | Capacity rules |
-| `matched` | `true` = already matched; pipeline skips |
+| `matching_status` | `matched` = already matched; pipeline skips. `submitted`, `unmatched`, null, or unknown values are treated as available for matching. |
 
 **Updated** in production by the `commit_matching_run` RPC:
 
 | Update | When |
 |--------|------|
-| `matched = true`, `original_unmatched = false` | Flight placed in a group this run |
-| `matched = false`, `original_unmatched = true` | Flight in date window but still unmatched |
+| `matching_status = 'matched'`, `original_unmatched = false` | Flight placed in a group this run |
+| `matching_status = 'unmatched'`, `original_unmatched = true` | Flight in date window but still unmatched |
 
 Connect merge may also read matched flights when rebuilding groups from existing rides.
 

@@ -100,7 +100,7 @@ Review CSVs → fix config if needed → re dry-run → production without `--dr
 |--|---------|------------|
 | Read `Flights` / `Users` | Yes | Yes |
 | Write `Rides` / `Matches` | **No** | **Yes** |
-| Update `Flights.matched` | **No** | **Yes** |
+| Update `Flights.matching_status` | **No** | **Yes** |
 | Voucher source | Local CSV `*.dryrun.csv` copy | `public."Vouchers"` table |
 | `AlgorithmStatus` | Skipped | Updated |
 | CSV output | Yes | No |
@@ -109,8 +109,8 @@ Review CSVs → fix config if needed → re dry-run → production without `--dr
 
 - Calls `commit_matching_run` once with a validated payload
 - Inserts `Rides` and `Matches`
-- Sets matched flights to `matched=true`
-- Marks still-unmatched flights `matched=false`, `original_unmatched=true`
+- Sets matched flights to `matching_status='matched'`
+- Marks still-unmatched flights `matching_status='unmatched'`, `original_unmatched=true`
 - Cleans up rides absorbed into Connect merge
 - Consumes vouchers from `public."Vouchers"`
 - Records the commit in `public."MatchingRuns"` for idempotent retries
@@ -162,7 +162,7 @@ Column definitions: [Schema → CSV outputs](schema.md#local-csv-outputs).
 
 | Symptom | Likely cause | Action |
 |---------|--------------|--------|
-| `Fetched 0 rider forms` | Narrow date window or all flights matched | Widen `--days-ahead`; check `Flights.matched` in Supabase |
+| `Fetched 0 rider forms` | Narrow date window or all flights already matched | Widen `--days-ahead`; check `Flights.matching_status` in Supabase |
 | Many `no_time_overlap` | Sparse or incompatible windows | Normal for low volume; verify form times in DB |
 | Many `singleton_bucket` | Only one rider in bucket | Need more signups for that airport/day |
 | No vouchers assigned in dry-run | Not subsidized, wrong date, or Connect | Check `subsidized` column + `COVERED_DATES_*` |

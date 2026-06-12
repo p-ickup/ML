@@ -12,7 +12,7 @@ from unittest import mock
 
 import commit_payload
 import import_vouchers
-from rider_data import RiderLite
+from rider_data import RiderLite, normalize_matching_status
 
 
 class SupabaseIntegrationTestCase(unittest.TestCase):
@@ -119,7 +119,7 @@ class SupabaseIntegrationTestCase(unittest.TestCase):
         user_id: str,
         date: str = "2026-03-22",
         to_airport: bool = False,
-        matched: bool = False,
+        matching_status: str = "submitted",
     ) -> None:
         self.flight_ids.append(flight_id)
         self._execute(
@@ -133,7 +133,7 @@ class SupabaseIntegrationTestCase(unittest.TestCase):
                     "airport": "LAX",
                     "to_airport": to_airport,
                     "terminal": "1",
-                    "matched": matched,
+                    "matching_status": normalize_matching_status(matching_status),
                     "original_unmatched": False,
                     "flight_no": 9000 + (flight_id % 1000),
                     "airline_iata": "ZZ",
@@ -156,7 +156,7 @@ class SupabaseIntegrationTestCase(unittest.TestCase):
         airport: str = "LAX",
         to_airport: bool = False,
         terminal: str = "1",
-        matched: bool = False,
+        matching_status: str = "submitted",
         school: str = "POMONA",
         bags_no: int = 1,
         bags_no_large: int = 0,
@@ -174,7 +174,7 @@ class SupabaseIntegrationTestCase(unittest.TestCase):
             to_airport=to_airport,
             date=date,
             terminal=terminal,
-            matched=matched,
+            matching_status=normalize_matching_status(matching_status),
             school=school,
             bags_no=bags_no,
             bags_no_large=bags_no_large,
@@ -187,7 +187,7 @@ class SupabaseIntegrationTestCase(unittest.TestCase):
         *,
         label: str,
         flight_offset: int,
-        matched: bool = False,
+        matching_status: str = "submitted",
         date: str = "2026-03-22",
         earliest_time: str = "10:00:00",
         latest_time: str = "12:00:00",
@@ -203,7 +203,7 @@ class SupabaseIntegrationTestCase(unittest.TestCase):
             user_id=user_id,
             date=date,
             to_airport=to_airport,
-            matched=matched,
+            matching_status=matching_status,
         )
         return self._rider(
             user_id=user_id,
@@ -214,7 +214,7 @@ class SupabaseIntegrationTestCase(unittest.TestCase):
             airport=airport,
             to_airport=to_airport,
             terminal=terminal,
-            matched=matched,
+            matching_status=matching_status,
             label=label,
         )
 

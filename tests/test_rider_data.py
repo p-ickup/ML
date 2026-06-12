@@ -2,7 +2,7 @@
 
 import unittest
 
-from rider_data import normalize_airport, normalize_terminal
+from rider_data import normalize_airport, normalize_matching_status, normalize_terminal
 
 
 class TestNormalizeTerminal(unittest.TestCase):
@@ -31,6 +31,17 @@ class TestNormalizeAirport(unittest.TestCase):
 
     def test_missing(self):
         self.assertEqual(normalize_airport(None), "UNKNOWN")
+
+
+class TestNormalizeMatchingStatus(unittest.TestCase):
+    def test_known_statuses(self):
+        self.assertEqual(normalize_matching_status("matched"), "matched")
+        self.assertEqual(normalize_matching_status(" unmatched "), "unmatched")
+
+    def test_missing_or_unknown_defaults_to_submitted(self):
+        self.assertEqual(normalize_matching_status(None), "submitted")
+        self.assertEqual(normalize_matching_status(""), "submitted")
+        self.assertEqual(normalize_matching_status("pending"), "submitted")
 
 
 if __name__ == "__main__":

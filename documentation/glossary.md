@@ -5,7 +5,7 @@ Quick definitions for terms used across this repo and docs.
 | Term | Definition |
 |------|------------|
 | **Flight form** | A student’s airport ride signup; one row in Supabase `Flights`. |
-| **Unmatched flight** | `Flights.matched` is `NULL` or `false`. Only these are loaded for matching. |
+| **Unmatched flight** | `Flights.matching_status` is `submitted`, `unmatched`, null, or another non-`matched` value. Only flights that are not already `matched` are loaded for matching. |
 | **RiderLite** | In-memory rider object (`rider_data.py`) combining flight + user fields. |
 | **Bucket** | Subset of riders with same direction, airport, and school compatibility. Matching never crosses buckets. |
 | **Bucket key** | String label, e.g. `TO LAX \| POMONA`. |
