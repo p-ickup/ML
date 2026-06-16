@@ -39,6 +39,13 @@ def normalize_airport(raw: Optional[str]) -> str:
     return airport
 
 
+def normalize_matching_status(raw: Optional[str]) -> str:
+    status = str(raw or "").strip().lower()
+    if status in {"matched", "unmatched"}:
+        return status
+    return "submitted"
+
+
 # row shape used by buckets/matching
 @dataclass
 class RiderLite:
@@ -51,7 +58,7 @@ class RiderLite:
     to_airport: bool
     date: str
     terminal: Optional[str]
-    matched: bool
+    matching_status: str
     school: str
     bags_no: Optional[int]
     bags_no_large: Optional[int]
@@ -83,7 +90,7 @@ class RiderData:
             self.sb.table("Flights")
             .select(
                 "flight_id,user_id,flight_no,airline_iata,earliest_time,latest_time,"
-                "airport,date,to_airport,terminal,matched,bag_no,bag_no_large,bag_no_personal"
+                "airport,date,to_airport,terminal,matching_status,bag_no,bag_no_large,bag_no_personal"
             )
             .order("date", desc=False)
             .order("earliest_time", desc=False)
@@ -101,8 +108,8 @@ class RiderData:
         resp = q.execute()
         rows = []
         for row in resp.data or []:
-            # Unmatched = NULL or False (main pipeline only processes unmatched flights)
-            if row.get("matched") is True:
+            # The main pipeline only processes flights that have not already been matched.
+            if normalize_matching_status(row.get("matching_status")) == "matched":
                 continue
             rows.append(row)
         return rows
@@ -162,7 +169,7 @@ class RiderData:
                     to_airport=bool(f.get("to_airport")),
                     date=str(f.get("date")),
                     terminal=normalize_terminal(f.get("terminal")),
-                    matched=bool(f.get("matched", False)),
+                    matching_status=normalize_matching_status(f.get("matching_status")),
                     school=user_info.get("school"),
                     name=user_info.get("name"),
                     bags_no=(int(f["bag_no"]) if f.get("bag_no") is not None else None),

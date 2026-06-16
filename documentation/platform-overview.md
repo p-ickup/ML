@@ -9,8 +9,8 @@ This repository runs the **matching pipeline**: a batch Python job that:
 1. Loads **unmatched** flight signups for a date window  
 2. Groups riders into shared Uber rides (typically 2–5 people)  
 3. Optionally forms larger **Connect** shuttles (6–24 people)  
-4. Applies **subsidy** and assigns **Uber vouchers** on eligible covered dates  
-5. Writes results to CSV (review) and/or Supabase (production)
+4. Applies **subsidy** and determines voucher eligibility on covered dates  
+5. Writes dry-run review CSVs or commits production results through Supabase
 
 There is **no web server** in this repo. Operators or CI run `Algorithm/main.py` manually or on a schedule.
 
@@ -31,8 +31,8 @@ There is **no web server** in this repo. Operators or CI run `Algorithm/main.py`
                                               │
                          ┌────────────────────┼────────────────────┐
                          ▼                    ▼                    ▼
-                  matches/*.csv         Rides / Matches      voucher pool
-                  (dry-run review)      (production)         updated
+                  matches/*.csv      Rides / Matches /      Vouchers
+                  (dry-run review)   Flights transaction    consumed in DB
 ```
 
 **Upstream (outside this repo):** students submit forms; ops may schedule runs via `AlgorithmStatus`.
@@ -49,8 +49,8 @@ There is **no web server** in this repo. Operators or CI run `Algorithm/main.py`
 | **Bucket** | Split by direction (`TO`/`FROM`), airport, school |
 | **Match** | Build 2–5 rider groups per bucket with overlap + bag rules |
 | **Post-process** | ONT 4+2 splits, Connect retry, Connect merge with existing DB rides |
-| **Finalize** | Pickup times, subsidy, vouchers |
-| **Output** | CSV always; Supabase on production runs |
+| **Finalize** | Pickup times, subsidy, voucher eligibility |
+| **Output** | CSV for dry-run; transactional Supabase commit for production |
 
 See [pipeline_diagram.html](pipeline_diagram.html) for the interactive version.
 
@@ -76,6 +76,7 @@ Policy changes should start in `config.py` before changing matcher code.
 
 - **Dry-run** uses live reads but does **not** insert `Rides`/`Matches` or mark flights matched.  
 - Vouchers in dry-run use a `*.dryrun.csv` copy so the real pool is untouched.  
+- **Production** calls `commit_matching_run`, which commits rides, matches, flight updates, voucher consumption, and Connect cleanup in one transaction.
 - Always dry-run and review CSVs before removing `--dry-run`.
 
 Details: [Operations](operations.md).

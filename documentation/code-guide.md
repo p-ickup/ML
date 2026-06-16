@@ -24,9 +24,16 @@ ML/
 └── README.md                    # Quick start → links here
 ```
 
-Run tests from the repo root: `python3 -m unittest discover -s tests -t .` (see [Operations → Tests](operations.md#tests)).
-
-**Not used for current pipeline:** root `Dockerfile` targets a legacy `MLapi` web app. Run `python3 main.py` directly.
+Run unit tests from the repo root: `python3 -m unittest discover -s tests -t .`.
+Run lint checks from the repo root: `python3 -m ruff check .`.
+Run live Supabase integration tests explicitly: `python3 -m unittest tests.integration_supabase`
+(see [Operations → Tests](operations.md#tests)). The integration suite touches
+the configured Supabase database and covers voucher import, `AlgorithmStatus`,
+production commit side effects, rollback, and selected `main.run(...)`
+success and failure lifecycle scenarios.
+Integration helpers live in `tests/integration_supabase_base.py`; direct RPC
+coverage lives in `tests/integration_supabase_commit.py`; pipeline lifecycle
+coverage lives in `tests/integration_supabase_pipeline.py`.
 
 ---
 
@@ -39,8 +46,9 @@ Run tests from the repo root: `python3 -m unittest discover -s tests -t .` (see 
 **Does:**
 
 - Loads `.env`, creates Supabase client  
-- Calls fetch → bucket → match → post-process → Connect merge → times → subsidy → vouchers  
-- Writes CSV; writes DB + `AlgorithmStatus` in production  
+- Calls fetch → bucket → match → post-process → Connect merge → times → subsidy
+- Writes dry-run CSVs, or calls the transactional DB commit RPC in production
+- Updates `AlgorithmStatus` for production runs
 - Defines `apply_group_subsidy()` and LAX connect retry helper  
 
 **Start here when:** changing run order, subsidy thresholds, or DB/CSV write behavior.
@@ -63,7 +71,7 @@ Run tests from the repo root: `python3 -m unittest discover -s tests -t .` (see 
 
 **Does:**
 
-- `fetch_flights()` — date window + skip `matched = true`  
+- `fetch_flights()` — date window + skip `matching_status = 'matched'`
 - `fetch_users()` — school and name  
 - Normalizes airport and terminal strings  
 
@@ -125,20 +133,60 @@ Run tests from the repo root: `python3 -m unittest discover -s tests -t .` (see 
 **Does:**
 
 - Loads `Rides` / `Matches` / `Flights` for date range  
-- Forms Connect-tier groups; may delete absorbed smaller rides  
-- `cleanup_absorbed_rides()` before DB write  
+- Forms Connect-tier groups
+- Returns cleanup intent for absorbed smaller rides
+- Production cleanup is committed transactionally by the `commit_matching_run` RPC
 
 **Start here when:** changing how Connect combines with historical matches.
 
 ---
 
+### `commit_payload.py`
+
+**Role:** Build and validate the production commit payload sent to Supabase.
+
+**Does:**
+
+- Validates commit invariants before production persistence
+- Builds one payload containing groups, match rows, voucher eligibility, unmatched flight updates, and Connect cleanup intent
+- Calls the `commit_matching_run` RPC, which is the production transaction boundary
+- Uses `run_id` as the idempotency key for production commits
+
+**Start here when:** changing production persistence fields or commit invariants.
+
+**Database side:** `documentation/sql/001_commit_matching_run.sql` defines
+`public."MatchingRuns"` and `public.commit_matching_run(...)`. The RPC records
+successful commits by `run_id`; retrying the same payload returns the prior
+commit result instead of duplicating writes. Failed RPC attempts roll back in
+Postgres.
+
+Additional safeguards live in `documentation/sql/002_integrity_safeguards.sql`.
+Run its diagnostic queries before applying the constraints/indexes.
+
+---
+
 ### `vouchers.py`
 
-**Role:** Assign group and contingency vouchers from a local CSV pool.
+**Role:** Assign group and contingency vouchers from a local CSV pool for dry-run/review workflows.
 
 **Rules:** no Connect vouchers; subsidized + covered only; safe `USED` parsing.
 
-**Start here when:** changing voucher selection or CSV column handling.
+**Start here when:** changing dry-run voucher output or CSV column handling. Production voucher consumption happens in the `commit_matching_run` RPC against `public."Vouchers"`.
+
+---
+
+### `import_vouchers.py`
+
+**Role:** Validate legacy voucher CSVs and import them into `public."Vouchers"`.
+
+**Does:**
+
+- Validates required CSV columns and date ranges
+- Maps CSV rows to the `Vouchers` table shape
+- Upserts rows by `voucher_link`
+- Defaults imported rows to available production vouchers
+
+**Start here when:** changing the admin/import workflow for voucher CSVs.
 
 ---
 

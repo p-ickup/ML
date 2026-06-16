@@ -10,9 +10,10 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import connect_policy as cp
-from rider_data import RiderLite, normalize_airport
+from rider_data import RiderLite, normalize_airport, normalize_matching_status
 from ruleMatching import Match, _group_to_match, _interval
 from supabase import Client
+from time_windows import common_window_or_none
 
 
 def _as_date_string(value: Any) -> str:
@@ -37,18 +38,7 @@ def _as_time_string(value: Any) -> str:
 
 
 def _common_window_riders(riders: Sequence[RiderLite]) -> Optional[Tuple[Any, Any]]:
-    if not riders:
-        return None
-    starts, ends = [], []
-    for r in riders:
-        s, e = _interval(r)
-        starts.append(s)
-        ends.append(e)
-    latest_start = max(starts)
-    earliest_end = min(ends)
-    if latest_start > earliest_end:
-        return None
-    return latest_start, earliest_end
+    return common_window_or_none(riders, allow_touching=True)
 
 
 def _fetch_rides_in_range(sb: Client, start_date: str, end_date: str) -> Dict[int, Dict[str, Any]]:
@@ -84,7 +74,7 @@ def _fetch_flights(sb: Client, flight_ids: Sequence[int]) -> Dict[int, Dict[str,
             sb.table("Flights")
             .select(
                 "flight_id,user_id,flight_no,airline_iata,airport,to_airport,date,"
-                "earliest_time,latest_time,matched,bag_no,bag_no_large,bag_no_personal,terminal"
+                "earliest_time,latest_time,matching_status,bag_no,bag_no_large,bag_no_personal,terminal"
             )
             .in_("flight_id", chunk)
             .execute()
@@ -130,7 +120,7 @@ def _flight_to_rider_lite(flight: Dict[str, Any], user_info: Dict[str, Dict[str,
         to_airport=bool(flight.get("to_airport")),
         date=_as_date_string(flight.get("date")),
         terminal=flight.get("terminal"),
-        matched=bool(flight.get("matched")),
+        matching_status=normalize_matching_status(flight.get("matching_status")),
         school=school,
         name=info.get("name"),
         bags_no=(int(flight["bag_no"]) if flight.get("bag_no") is not None else None),
@@ -396,31 +386,3 @@ def merge_connect_with_existing(
         f"{len(leftover_matches)} small group(s), {len(still_unmatched)} unmatched in scope"
     )
     return other_matches + leftover_matches + connect_matches, still_unmatched, connect_matches
-
-
-def cleanup_absorbed_rides(sb: Client, connect_matches: Sequence[Match]) -> None:
-    flight_ids: Set[int] = set()
-    for m in connect_matches:
-        for r in m.riders:
-            flight_ids.add(r.flight_id)
-    if not flight_ids:
-        return
-
-    old_matches = []
-    for i in range(0, len(sorted(flight_ids)), 100):
-        chunk = sorted(flight_ids)[i : i + 100]
-        resp = sb.table("Matches").select("ride_id,flight_id").in_("flight_id", chunk).execute()
-        old_matches.extend(resp.data or [])
-
-    old_ride_ids: Set[int] = set()
-    for row in old_matches:
-        if row.get("ride_id") is not None:
-            old_ride_ids.add(int(row["ride_id"]))
-
-    for row in old_matches:
-        sb.table("Matches").delete().eq("ride_id", row["ride_id"]).eq("flight_id", row["flight_id"]).execute()
-
-    for ride_id in old_ride_ids:
-        remaining = sb.table("Matches").select("flight_id").eq("ride_id", ride_id).execute()
-        if not remaining.data:
-            sb.table("Rides").delete().eq("ride_id", ride_id).execute()

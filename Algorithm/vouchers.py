@@ -27,7 +27,8 @@ def is_ride_date_covered(ride_date: date, to_airport: bool) -> bool:
 
 def _parse_month_day(s: str, year: int):
     # convert "November 21" into a date object for the given year
-    return datetime.strptime(f"{s} {year}", "%B %d %Y").date()
+    cleaned = " ".join(str(s).strip().split())
+    return datetime.strptime(f"{cleaned} {year}", "%B %d %Y").date()
 
 
 def _parse_csv_bool(val) -> bool:
@@ -103,8 +104,10 @@ def assign_vouchers(
     """
     Assign vouchers to matches from a local CSV pool.
 
+    The production pipeline no longer uses this function to consume vouchers;
+    production voucher consumption happens in the transactional DB commit RPC.
     Dry-run: copies to ``<path>.dryrun.csv`` and updates the copy only.
-    Production: updates the voucher CSV at ``voucher_csv_path``.
+    Legacy/non-pipeline use with dry_run=False updates ``voucher_csv_path``.
     """
     if dry_run:
         working_path = voucher_csv_path + ".dryrun.csv"

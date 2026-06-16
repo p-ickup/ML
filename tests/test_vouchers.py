@@ -87,6 +87,14 @@ class TestLoadVoucherPool(VoucherPoolTestCase):
         self.assertFalse(bool(df.loc[0, "Contingency"]))
         self.assertEqual(df.loc[0, "start_date"].month, 5)
 
+    def test_parses_month_day_with_surrounding_whitespace(self):
+        path = self.write_pool(["June 29, July 1,False,V1,False,ONT,False"])
+        df = vouchers.load_voucher_pool(path)
+        self.assertEqual(df.loc[0, "start_date"].month, 6)
+        self.assertEqual(df.loc[0, "start_date"].day, 29)
+        self.assertEqual(df.loc[0, "end_date"].month, 7)
+        self.assertEqual(df.loc[0, "end_date"].day, 1)
+
 
 class TestAssignVouchers(VoucherPoolTestCase):
     def test_group_voucher_assigned_and_marked_used(self):

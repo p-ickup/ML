@@ -72,12 +72,28 @@ class TestPickupTime(unittest.TestCase):
         chosen = rm.pickup_datetime_for_group([a, b])
         self.assertEqual((chosen.hour, chosen.minute), (11, 45))
 
+    def test_to_airport_cross_midnight_is_15_before_next_day_overlap_end(self):
+        a = make_rider(1, date="2026-05-12", to_airport=True, earliest_time="23:45:00", latest_time="00:30:00")
+        b = make_rider(2, date="2026-05-12", to_airport=True, earliest_time="23:55:00", latest_time="00:20:00")
+
+        chosen = rm.pickup_datetime_for_group([a, b])
+
+        self.assertEqual(chosen, datetime(2026, 5, 13, 0, 5))
+
     def test_from_airport_is_15_after_overlap_start(self):
         # overlap start = 11:00 ; FROM airport → 15 min after start = 11:15
         a = make_rider(1, to_airport=False, earliest_time="10:00:00", latest_time="12:00:00")
         b = make_rider(2, to_airport=False, earliest_time="11:00:00", latest_time="13:00:00")
         chosen = rm.pickup_datetime_for_group([a, b])
         self.assertEqual((chosen.hour, chosen.minute), (11, 15))
+
+    def test_from_airport_cross_midnight_is_15_after_overlap_start(self):
+        a = make_rider(1, date="2026-05-12", to_airport=False, earliest_time="22:00:00", latest_time="03:00:00")
+        b = make_rider(2, date="2026-05-12", to_airport=False, earliest_time="23:00:00", latest_time="02:30:00")
+
+        chosen = rm.pickup_datetime_for_group([a, b])
+
+        self.assertEqual(chosen, datetime(2026, 5, 12, 23, 15))
 
 
 class TestRefreshTimes(unittest.TestCase):
@@ -102,6 +118,17 @@ class TestMatchBucket(unittest.TestCase):
             a = make_rider(1, earliest_time="10:00:00", latest_time="12:00:00", bags_no=1)
             b = make_rider(2, earliest_time="11:00:00", latest_time="13:00:00", bags_no=1)
             matches, unmatched, _diag = rm.match_bucket([a, b], bucket_key="TO LAX | POMONA")
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(len(matches[0].riders), 2)
+            self.assertEqual(unmatched, [])
+
+    def test_cross_midnight_riders_form_a_group(self):
+        with patch_config(TERMINAL_MODE="slack"):
+            a = make_rider(1, earliest_time="23:45:00", latest_time="00:30:00", bags_no=1)
+            b = make_rider(2, earliest_time="23:55:00", latest_time="00:20:00", bags_no=1)
+
+            matches, unmatched, _diag = rm.match_bucket([a, b], bucket_key="TO LAX | POMONA")
+
             self.assertEqual(len(matches), 1)
             self.assertEqual(len(matches[0].riders), 2)
             self.assertEqual(unmatched, [])

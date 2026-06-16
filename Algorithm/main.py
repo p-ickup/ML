@@ -1,6 +1,8 @@
 """
-Main entry point for pickup system v1 MVP
-Streamlined version that directly handles ride creation and matching
+Main entry point for the Pickup matching pipeline.
+
+Dry-run writes review CSVs. Production commits rides, matches, flight updates,
+voucher consumption, and Connect cleanup through the transactional Supabase RPC.
 """
 
 import argparse
@@ -8,18 +10,25 @@ import csv
 import json
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 import algorithmStatus
 import config
 import connect_policy as cp
-from buckets import bucket_names, make_buckets
+from buckets import make_buckets
+from commit_payload import (
+    build_matching_commit_payload,
+    commit_matching_run,
+    compute_group_time_window,
+    determine_uber_type,
+    match_datetime_from_earliest,
+)
 from dotenv import load_dotenv
 from rider_data import RiderData, RiderLite
-from connect_merge import cleanup_absorbed_rides, merge_connect_with_existing
+from connect_merge import merge_connect_with_existing
 from ruleMatching import Match, _ont_post_process_unmatched, match_bucket, refresh_match_suggested_times
-from supabase import Client, create_client
+from supabase import create_client
 
 from vouchers import assign_vouchers, is_ride_date_covered
 
@@ -27,118 +36,10 @@ load_dotenv()
 
 # Load environment variables for Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-print(SUPABASE_URL)
 SUPABASE_KEY = os.getenv("SUPABASE_SECRET_KEY")
 
 # Initialize Supabase client and location cache
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# sum of bags for a rider (None -> 0)
-def _bags_total(r: RiderLite) -> int:
-    return int(r.bags_no or 0) + int(r.bags_no_large or 0)
-
-
-def _determine_uber_type(group_size: int, bag_units: int) -> Optional[str]:
-    """
-    Determine uber_type based on group size and bag units.
-    
-    Rules:
-    - 2-3 riders: 0-4 bags = X, 5-10 bags = XL, 11-12 bags = XXL
-    - 4 riders: 0-3 bags = X, 4-7 bags = XL, 8-10 bags = XXL, 11+ = None (not allowed)
-    - 5 riders: 0-5 bags = XL, 6-8 bags = XXL, 9+ = None (not allowed)
-    - 6 riders: 0-3 bags = XL, 4-6 bags = XXL, 7+ = None (not allowed)
-    
-    Hard limit: 12 bag units for 2-3 riders, 10 bag units for 4+ riders
-    """
-    # Group-size-aware hard limit check
-    if group_size == 2 or group_size == 3:
-        if bag_units > 12:
-            return None
-    else:
-        if bag_units > 10:
-            return None
-    
-    if group_size == 2 or group_size == 3:
-        if 0 <= bag_units <= 4:
-            return "X"
-        elif 5 <= bag_units <= 10:
-            return "XL"
-        elif 11 <= bag_units <= 12:
-            return "XXL"
-        else:
-            return None  # Not allowed
-    
-    elif group_size == 4:
-        if 0 <= bag_units <= 3:
-            return "X"
-        elif 4 <= bag_units <= 7:
-            return "XL"
-        elif 8 <= bag_units <= 10:
-            return "XXL"
-        else:
-            return None  # 11+ not allowed
-    
-    elif group_size == 5:
-        if 0 <= bag_units <= 5:
-            return "XL"
-        elif 6 <= bag_units <= 8:
-            return "XXL"
-        else:
-            return None  # 9+ not allowed
-    
-    elif group_size == 6:
-        if 0 <= bag_units <= 3:
-            return "XL"
-        elif 4 <= bag_units <= 6:
-            return "XXL"
-        else:
-            return None  # 7+ not allowed
-    
-    else:
-        # Group size 1 or > 6 not supported
-        return None
-
-
-# compute group time window (earliest_time and latest_time across all riders)
-def _compute_group_time_window(riders: List[RiderLite]) -> Tuple[str, str]:
-    """
-    Compute the time window for a group of riders.
-    Returns (earliest_time, latest_time) as ISO time strings.
-    earliest_time = max of all riders' earliest_time (latest start)
-    latest_time = min of all riders' latest_time (earliest end)
-    """
-    starts, ends = [], []
-    for r in riders:
-        s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-        e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-        starts.append(s)
-        ends.append(e)
-    latest_start = max(starts)
-    earliest_end = min(ends)
-    earliest_time = latest_start.time().replace(microsecond=0).isoformat()
-    latest_time = earliest_end.time().replace(microsecond=0).isoformat()
-    return earliest_time, latest_time
-
-# Official ride date/time for persistence (uses suggested_time_iso from pickup rules).
-def _match_datetime_from_earliest(m: Match) -> Tuple[str, str]:
-    if m.suggested_time_iso:
-        dt = datetime.fromisoformat(m.suggested_time_iso)
-        return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
-    starts, ends = [], []
-    for r in m.riders:
-        s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-        e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-        if e < s:
-            e += timedelta(days=1)
-        starts.append(s)
-        ends.append(e)
-    dt = max(starts)
-    return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
-
-# split ISO to (date, time) if needed elsewhere
-def _split_iso(dt_iso: str) -> Tuple[str, str]:
-    dt = datetime.fromisoformat(dt_iso)
-    return dt.date().isoformat(), dt.time().replace(microsecond=0).isoformat()
 
 # write matches to csv (one row per rider, grouped by a simulated ride_id; uses earliest-overlap date/time)
 def _write_matches_csv(
@@ -150,18 +51,7 @@ def _write_matches_csv(
     Write matches to a CSV (one row per matched ride group).
     Also prints how many flights were matched vs unmatched.
     """
-    
-    # print("\n================= DEBUG: GROUPS AT CSV WRITE =================")
-    # for idx, m in enumerate(matches, start=1):
-    #     print(f"[CSV {idx}] bucket={m.bucket_key}, size={len(m.riders)}")
-    #     for r in m.riders:
-    #         print(
-    #             f"   flight_id={r.flight_id}, user_id={r.user_id}, "
-    #             f"school={r.school}, subsidized={r.subsidized}, id={id(r)}"
-    #         )
-    # print("===============================================================\n")
-    
-    
+
     if not matches:
         print("No matches to write.")
         return
@@ -169,28 +59,9 @@ def _write_matches_csv(
     rows = []
     for idx, m in enumerate(matches, start=1):
         sim_ride_id = idx
-        
-        # # DEBUG BLOCK
-        # print(f"\n[CSV WRITE — GROUP {sim_ride_id}] "
-        #     f"bucket={m.bucket_key}, size={len(m.riders)}, "
-        #     f"airport={m.riders[0].airport if m.riders else None}")
-        
-        # compute window across all riders
-        starts, ends = [], []
-        for r in m.riders:
-            # print(f"   Rider flight_id={r.flight_id}, user_id={r.user_id}, "
-            #   f"school={r.school}, subsidized={r.subsidized}")
-            s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-            e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-            starts.append(s)
-            ends.append(e)
 
-        latest_start = max(starts)
-        earliest_end = min(ends)
-
-        match_date = latest_start.date().isoformat()
-        # Use shared helper function to compute group time window
-        earliest_time, latest_time = _compute_group_time_window(m.riders)
+        match_date, _ = match_datetime_from_earliest(m)
+        earliest_time, latest_time = compute_group_time_window(m.riders)
 
         suggested_time_iso = m.suggested_time_iso or ""
         try:
@@ -225,13 +96,9 @@ def _write_matches_csv(
         match_times = "[" + ", ".join(
             f"{r.earliest_time}-{r.latest_time}" for r in riders_sorted
         ) + "]"
-        # default vouchers
-        voucher = ""
-        contingency_list: List[str] = [""] * len(m.riders)
-
         # Determine uber_type: use ride_type (e.g. Connect) if set, else from group size and bags
         group_size = len(m.riders)
-        uber_type = getattr(m, "ride_type", None) or _determine_uber_type(group_size, considered_bags)
+        uber_type = getattr(m, "ride_type", None) or determine_uber_type(group_size, considered_bags)
 
         rows.append({
             "ride_id_simulated": sim_ride_id,
@@ -369,93 +236,6 @@ def _final_lax_unmatched_retry(
     all_unmatched_new = non_connect_unmatched + lax_leftovers
     print(f"  Connect-scope final retry (new groups only): {len(new_matches)} new group(s), {len(matched_flight_ids)} riders matched")
     return all_matches + new_matches, all_unmatched_new
-
-
-# persist matches to Supabase (create one Rides row per group; insert Matches rows with SAME ride_id;
-# set Flights.matched = true; include earliest-overlap date/time and voucher_given=false)
-def _write_matches_db(sb: Client, matches: List[Match], all_riders: List[RiderLite]) -> None:
-    if not matches:
-        print("No matches to write.")
-        return
-
-    for m in matches:
-        # choose earliest-overlap as the official match datetime for both Rides.ride_date and Matches.(date,time)
-        ride_date, match_time = _match_datetime_from_earliest(m)
-
-        # Calculate bag units for uber_type determination
-        num_large_bags = sum(int(r.bags_no_large or 0) for r in m.riders)
-        num_normal_bags = sum(int(r.bags_no or 0) for r in m.riders)
-        bag_units = (num_large_bags * config.LARGE_BAG_MULTIPLIER) + num_normal_bags
-        if config.PERSONAL_CONSTRAINT:
-            num_personal_bags = sum(int(getattr(r, "bag_no_personal", 0) or 0) for r in m.riders)
-            bag_units += num_personal_bags
-        
-        # Determine uber_type: use ride_type (e.g. Connect) if set, else from group size and bags
-        group_size = len(m.riders)
-        uber_type = getattr(m, "ride_type", None) or _determine_uber_type(group_size, bag_units)
-
-        # Rides with uncovered dates must not be written as subsidized (enforce at persist time)
-        ride_date_for_cover = datetime.fromisoformat(m.suggested_time_iso).date()
-        to_airport = m.riders[0].to_airport
-        covered = is_ride_date_covered(ride_date_for_cover, to_airport)
-        write_subsidized = bool(getattr(m, "group_subsidy", False) and covered)
-
-        # Calculate group time window (earliest_time and latest_time across all riders)
-        # Use shared helper function to ensure consistency with CSV output
-        group_earliest_time, group_latest_time = _compute_group_time_window(m.riders)
-
-        # 1) create the ride row and get the unique ride_id (shared by the whole group)
-        ride_resp = sb.table("Rides").insert({"ride_date": ride_date}).execute()
-        if not ride_resp.data or "ride_id" not in ride_resp.data[0]:
-            print("Failed to create ride row; skipping one group.")
-            continue
-        ride_id = ride_resp.data[0]["ride_id"]
-
-        # 2) insert each member with SAME ride_id into Matches (is_subsidized only if covered)
-        rows = []
-        flight_ids = []
-        for r in m.riders:
-            rows.append({
-                "ride_id": ride_id,                # shared group id
-                "user_id": r.user_id,
-                "flight_id": r.flight_id,
-                "date": ride_date,                 # earliest overlap date
-                "time": match_time,                # earliest overlap time (time w/o tz)
-                "earliest_time": group_earliest_time,  # group's earliest time window
-                "latest_time": group_latest_time,      # group's latest time window
-                "source": "ml",                  
-                "voucher": getattr(r, "group_voucher", ""),
-                "contingency_voucher": getattr(r, "contingency_voucher", None),
-                "is_verified": False,
-                "is_subsidized": write_subsidized,   # false if ride date not covered
-                "uber_type": uber_type,           # same for all riders in the group
-            })
-            flight_ids.append(r.flight_id)
-
-        if rows:
-            sb.table("Matches").insert(rows).execute()
-
-        # 3) mark all flights in the group as matched; original_unmatched = False (was matched this run)
-        if flight_ids:
-            sb.table("Flights").update({"matched": True, "original_unmatched": False}).in_("flight_id", flight_ids).execute()
-
-    considered_ids = {r.flight_id for r in all_riders}
-
-    matched_ids = {
-        r.flight_id
-        for m in matches
-        for r in m.riders
-    }
-
-    unmatched_ids = list(considered_ids - matched_ids)
-
-    if unmatched_ids:
-        sb.table("Flights").update({"matched": False, "original_unmatched": True}).in_("flight_id", unmatched_ids).execute()
-
-    print(
-        f"Wrote {len(matches)} groups to Supabase and updated Flights.matched / original_unmatched. "
-        f"Marked {len(matched_ids)} matched=True (original_unmatched=False) and {len(unmatched_ids)} matched=False (original_unmatched=True)."
-    )
 
 
 def apply_group_subsidy(matches: list[Match], thresholds: Dict[str, int]) -> None:
@@ -629,32 +409,40 @@ def run(
         if time_updates:
             print(f"Refreshed suggested pickup time on {time_updates} group(s).")
 
-        # Subsidy + vouchers once the final group list is known (ONT splits, LAX retry, Connect merge)
+        # Subsidy once the final group list is known (ONT splits, LAX retry, Connect merge).
+        # Production voucher assignment is committed transactionally by the DB RPC.
         apply_group_subsidy(
             all_matches,
             thresholds={"LAX": 3, "ONT": 2}
         )
-        assign_vouchers(
-            all_matches,
-            voucher_csv_path=vouchers_csv_path,
-            dry_run=dry_run,
-        )
+        if dry_run:
+            assign_vouchers(
+                all_matches,
+                voucher_csv_path=vouchers_csv_path,
+                dry_run=True,
+            )
         
         # report summary
         print(f"Buckets: {len(buckets)} | Groups: {len(all_matches)} | Unmatched: {len(all_unmatched)}")
 
-        _write_matches_csv(all_matches, riders, csv_path)
-        _write_unmatched_with_reasons(all_unmatched, all_diag, unmatched_csv_path)
-
-        # DB writes only if not dry-run
-        if not dry_run:
-            if connect_for_cleanup:
-                cleanup_absorbed_rides(supabase, connect_for_cleanup)
-            ride_ids = _write_matches_db(supabase, all_matches, riders)
+        if dry_run:
+            _write_matches_csv(all_matches, riders, csv_path)
+            _write_unmatched_with_reasons(all_unmatched, all_diag, unmatched_csv_path)
+        else:
+            commit_payload = build_matching_commit_payload(
+                run_id=run_id,
+                matches=all_matches,
+                all_riders=riders,
+                connect_for_cleanup=connect_for_cleanup,
+            )
+            commit_result = commit_matching_run(
+                supabase,
+                run_id=run_id,
+                payload=commit_payload,
+            )
+            print(f"Committed matching run atomically: {commit_result}")
             # Update status to success
             algorithmStatus.update_algorithm_status(supabase, status_id, "success", run_id=run_id)
-        else:
-            ride_ids = []
             
     except Exception as e:
         # Update status to failed with error message
@@ -668,7 +456,7 @@ def run(
 # cli entry
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pickup matcher")
-    parser.add_argument("--dry-run", action="store_true", help="do not write to DB; export CSV instead")
+    parser.add_argument("--dry-run", action="store_true", help="do not write to DB; export review CSVs instead")
     parser.add_argument("--csv", type=str, default="../matches/matches_dryrun.csv", help="CSV path for --dry-run output")
     parser.add_argument(
         "--days-ahead", type=int, default=10, help="inclusive end: only flights on or before (today + N days)"
@@ -679,7 +467,7 @@ if __name__ == "__main__":
         default=None,
         help="inclusive start: only flights on or after (today + N days). Omit to keep the legacy lower bound (flight date strictly after today).",
     )
-    parser.add_argument("--vouchers", type=str, default="../vouchers/Thanksgiving.csv",help="Path to vouchers CSV")
+    parser.add_argument("--vouchers", type=str, default="../vouchers/Thanksgiving.csv", help="Path to dry-run vouchers CSV")
     args = parser.parse_args()
 
     run(
@@ -689,5 +477,3 @@ if __name__ == "__main__":
         days_ahead_start=args.days_ahead_start,
         vouchers_csv_path=args.vouchers,
     )
-
-

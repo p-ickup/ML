@@ -9,6 +9,7 @@ import audit
 import config as config
 import connect_policy as cp
 from rider_data import RiderLite
+from time_windows import common_window, rider_interval
 
 
 # shape returned to main for persistence / writing
@@ -24,14 +25,7 @@ class Match:
 
 # parse a rider's window into datetimes
 def _interval(r: RiderLite) -> Tuple[datetime, datetime]:
-    start = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-    end   = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-
-    # Handle overnight (cross-midnight) windows
-    if end < start:
-        end += timedelta(days=1)
-
-    return start, end
+    return rider_interval(r)
 
 
 # calculate time window duration in minutes for a rider
@@ -43,22 +37,6 @@ def _time_window_duration(r: RiderLite) -> int:
     start, end = _interval(r)
     duration = (end - start).total_seconds() / 60.0
     return int(duration)
-
-
-
-# compute intersection [start,end) and its minutes for any group
-def _intersection(members: List[RiderLite]) -> Tuple[datetime, datetime, int]:
-    starts = []
-    ends = []
-    for m in members:
-        s, e = _interval(m)
-        starts.append(s)
-        ends.append(e)
-    start = max(starts)
-    end = min(ends)
-    minutes = int((end - start).total_seconds() // 60)
-    return start, end, minutes
-
 
 def _are_same_flight(members: List[RiderLite]) -> bool:
     """
@@ -87,7 +65,8 @@ def _effective_overlap_minutes(members: List[RiderLite]) -> int:
     starts, ends = [], []
     for m in members:
         s, e = _interval(m)
-        starts.append(s); ends.append(e)
+        starts.append(s)
+        ends.append(e)
     latest_start = max(starts)
     earliest_end = min(ends)
     overlap_min = (earliest_end - latest_start).total_seconds() / 60.0
@@ -140,7 +119,7 @@ def _is_valid_group(members: List[RiderLite]) -> bool:
         return False
 
     # BAG CAPACITY RULES (configurable)
-    total_large, total_normal, total_personal, total_all = _bags_totals(members)
+    total_large, _, _, total_all = _bags_totals(members)
     group_size = len(members)
 
     # Final pass: allow groups of 3 with max 12 bag units and up to 12 large bags (Uber XXL)
@@ -286,8 +265,6 @@ def _split_full_group_for_leftovers(
     while changed:
         changed = False
 
-        # find first leftover that we can rescue
-        li = None
         for idx_l, L in enumerate(lo):
             # Skip if this leftover's flight_id is already matched
             if L.flight_id in matched_flight_ids:
@@ -529,7 +506,7 @@ def _promote_lax_twos(matches: List[Match], bucket_key: Optional[str]) -> List[M
         matches_by_date.setdefault(d, []).append(m)
 
     # Work on the existing objects (Match objects are mutable)
-    for date, ms in matches_by_date.items():
+    for ms in matches_by_date.values():
         # all 2-person matches
         twos = [m for m in ms if len(m.riders) == 2]
 
@@ -539,9 +516,6 @@ def _promote_lax_twos(matches: List[Match], bucket_key: Optional[str]) -> List[M
 
         for m2 in twos:
             A, B = m2.riders  # the two riders to promote
-            # Build set of flight_ids already in other matches (not m2 or donor)
-            other_flight_ids = {r.flight_id for m in ms if m is not m2 for r in m.riders}
-
             # search donor groups
             for donor in ms:
                 if donor is m2:
@@ -620,9 +594,7 @@ def _combine_pairs_into_fours(matches: List[Match], bucket_key: Optional[str] = 
     # Build set of all flight_ids already in non-2-person matches
     other_flight_ids = {r.flight_id for m in matches if len(m.riders) != 2 for r in m.riders}
     
-    # Try to combine pairs
     combined_indices = set()
-    new_matches = []
     combined_pairs = []
     
     for i, m1 in enumerate(twos):
@@ -917,16 +889,9 @@ def _ont_post_process_unmatched(
     # Helper function to check if two time windows overlap (quick check)
     def _time_windows_overlap(rider1: RiderLite, rider2: RiderLite) -> bool:
         """Quick check if two riders' time windows overlap."""
-        s1 = datetime.fromisoformat(f"{rider1.date}T{rider1.earliest_time}")
-        e1 = datetime.fromisoformat(f"{rider1.date}T{rider1.latest_time}")
-        if e1 < s1:
-            e1 += timedelta(days=1)
-        
-        s2 = datetime.fromisoformat(f"{rider2.date}T{rider2.earliest_time}")
-        e2 = datetime.fromisoformat(f"{rider2.date}T{rider2.latest_time}")
-        if e2 < s2:
-            e2 += timedelta(days=1)
-        
+        s1, e1 = _interval(rider1)
+        s2, e2 = _interval(rider2)
+
         # Overlap exists if latest_start < earliest_end
         latest_start = max(s1, s2)
         earliest_end = min(e1, e2)
@@ -935,15 +900,7 @@ def _ont_post_process_unmatched(
     # Helper function to compute group time window
     def _group_time_window(riders: List[RiderLite]) -> Tuple[datetime, datetime]:
         """Compute the time window for a group (earliest start, latest end)."""
-        starts, ends = [], []
-        for r in riders:
-            s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-            e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-            if e < s:
-                e += timedelta(days=1)
-            starts.append(s)
-            ends.append(e)
-        return max(starts), min(ends)
+        return common_window(riders)
     
     # Group unmatched by date
     unmatched_by_date: Dict[str, List[RiderLite]] = {}
@@ -1012,10 +969,7 @@ def _ont_post_process_unmatched(
                     continue
                 
                 # Pre-compute unmatched rider's time window
-                u_start = datetime.fromisoformat(f"{unmatched_rider.date}T{unmatched_rider.earliest_time}")
-                u_end = datetime.fromisoformat(f"{unmatched_rider.date}T{unmatched_rider.latest_time}")
-                if u_end < u_start:
-                    u_end += timedelta(days=1)
+                u_start, u_end = _interval(unmatched_rider)
                 
                 # Try each group of 4 on this date
                 for match_4, (group_start, group_end) in date_matches_with_windows:
@@ -1155,7 +1109,7 @@ def _final_leftovers(
             
             # Check other validity constraints (bags, terminal) but allow 0-minute overlaps
             # Check bag capacity
-            total_large, total_normal, total_personal, total_all = _bags_totals(trial)
+            total_large, _, _, total_all = _bags_totals(trial)
             if total_large > config.MAX_LARGE_BAGS:
                 continue
             # Groups of 5 must have < 8 bags, groups of 3 can have <= 12, others <= 10
@@ -1325,75 +1279,6 @@ def _try_lax_connect_shuttles(
         return [], riders
     return all_connect_matches, all_remaining
 
-
-def merge_groups_into_connect_shuttles(matches: List[Match]) -> List[Match]:
-    """
-    After all matching: try to merge Connect-scoped groups with overlapping times
-    into a single Connect shuttle (per CONNECT_SIZE* tiers).
-    """
-    if not cp.connect_enabled():
-        return matches
-
-    connect_matches: List[Match] = []
-    other_matches: List[Match] = []
-    for m in matches:
-        if _is_lax_departures_bucket(m.bucket_key):
-            connect_matches.append(m)
-        else:
-            other_matches.append(m)
-
-    if not connect_matches:
-        return matches
-
-    by_bucket_date: Dict[Tuple[str, str], List[Match]] = {}
-    for m in connect_matches:
-        if not m.riders:
-            continue
-        key = (m.bucket_key or "", m.riders[0].date)
-        by_bucket_date.setdefault(key, []).append(m)
-
-    out_connect: List[Match] = []
-    for (bucket_key, date), group_matches in by_bucket_date.items():
-        if not bucket_key or not _is_lax_departures_bucket(bucket_key):
-            out_connect.extend(group_matches)
-            continue
-        remaining = list(group_matches)
-        # Repeatedly try to merge: find a maximal cluster with common overlap and size in [8,25] or [30,55]
-        while remaining:
-            cluster: List[Match] = [remaining[0]]
-            riders: List[RiderLite] = list(remaining[0].riders)
-            remaining = remaining[1:]
-            flight_ids = {r.flight_id for r in riders}
-            # Greedily add any match that overlaps with current riders and doesn't duplicate flight_id
-            while True:
-                added = False
-                for i, m in enumerate(remaining):
-                    if any(r.flight_id in flight_ids for r in m.riders):
-                        continue
-                    new_riders = riders + m.riders
-                    if not _time_overlap_no_bags(new_riders):
-                        continue
-                    cluster.append(m)
-                    riders = new_riders
-                    flight_ids |= {r.flight_id for r in m.riders}
-                    remaining.pop(i)
-                    added = True
-                    break
-                if not added:
-                    break
-            n = len(riders)
-            if cp.fits_connect_size(n):
-                merged = _group_to_match(riders, bucket_key=bucket_key)
-                merged.ride_type = "Connect"
-                out_connect.append(merged)
-            else:
-                out_connect.extend(cluster)
-
-    result = list(other_matches)
-    result.extend(out_connect)
-    return result
-
-
 # perform matching inside a single bucket
 def match_bucket(
     riders: List[RiderLite],
@@ -1504,7 +1389,7 @@ def _match_bucket_impl(riders: List[RiderLite], bucket_key: Optional[str] = None
     matches, leftovers = _final_leftovers(matches, leftovers, bucket_key=bucket_key)
 
     # compose diagnostics for leftovers
-    diag = audit.finalize_unmatched_diag(riders, bucket_key, pairs, pair_diag, feasible_count, used)
+    diag = audit.finalize_unmatched_diag(riders, bucket_key, pair_diag, feasible_count, used)
     # Prepend LAX Connect Shuttle matches if we formed any
     if connect_matches:
         matches = connect_matches + matches

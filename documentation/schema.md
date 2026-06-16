@@ -18,7 +18,7 @@ Built in `Algorithm/rider_data.py` from one `Flights` row + one `Users` row.
 | `terminal` | Flights | Normalized terminal code |
 | `school`, `name` | Users | Skipped if `school` is missing |
 | `bags_no`, `bags_no_large`, `bag_no_personal` | Flights | Bag counts |
-| `matched` | Flights | Carried through; pipeline input is unmatched only |
+| `matching_status` | Flights | `submitted`, `unmatched`, or `matched`; pipeline skips `matched` |
 | `subsidized` | Set later | Per-rider flag during subsidy pass |
 
 ## In-memory: `Match`
@@ -31,7 +31,7 @@ Built in `Algorithm/ruleMatching.py`; one object = one ride group.
 | `bucket_key` | e.g. `TO LAX \| POMONA` |
 | `suggested_time_iso` | Pickup datetime (ISO) after time rules |
 | `group_subsidy` | Set in `main.apply_group_subsidy` |
-| `group_voucher` | Set in `vouchers.assign_vouchers` |
+| `group_voucher` | Set by dry-run CSV assignment; production vouchers are assigned in the RPC |
 | `ride_type` | e.g. `"Connect"` for shuttles; else Uber sizing applies |
 
 ---
@@ -40,7 +40,7 @@ Built in `Algorithm/ruleMatching.py`; one object = one ride group.
 
 ### `Flights` (read + update)
 
-**Read** by `rider_data.fetch_flights()` for the CLI date window. Rows with `matched = true` are excluded client-side.
+**Read** by `rider_data.fetch_flights()` for the CLI date window. Rows with `matching_status = 'matched'` are excluded client-side.
 
 | Field (used) | Role |
 |--------------|------|
@@ -51,14 +51,14 @@ Built in `Algorithm/ruleMatching.py`; one object = one ride group.
 | `airport`, `to_airport`, `terminal` | Bucketing + rules |
 | `flight_no`, `airline_iata` | Same-flight priority |
 | `bag_no`, `bag_no_large`, `bag_no_personal` | Capacity rules |
-| `matched` | `true` = already matched; pipeline skips |
+| `matching_status` | `matched` = already matched; pipeline skips. `submitted`, `unmatched`, null, or unknown values are treated as available for matching. |
 
-**Updated** in production (`main._write_matches_db`):
+**Updated** in production by the `commit_matching_run` RPC:
 
 | Update | When |
 |--------|------|
-| `matched = true`, `original_unmatched = false` | Flight placed in a group this run |
-| `matched = false`, `original_unmatched = true` | Flight in date window but still unmatched |
+| `matching_status = 'matched'`, `original_unmatched = false` | Flight placed in a group this run |
+| `matching_status = 'unmatched'`, `original_unmatched = true` | Flight in date window but still unmatched |
 
 Connect merge may also read matched flights when rebuilding groups from existing rides.
 
@@ -70,19 +70,20 @@ Connect merge may also read matched flights when rebuilding groups from existing
 | `school` | Required for bucketing; missing → flight skipped |
 | `firstname`, `lastname` | Combined into rider `name` for CSV |
 
-### `Rides` (read + insert + delete)
+### `Rides` (read + insert + transactional cleanup)
 
-**Insert** (production): one row per matched group.
+**Insert** (production): one row per matched group inside `commit_matching_run`.
 
 | Field (written) | Value |
 |-----------------|-------|
 | `ride_date` | Date from earliest overlap logic |
+| `ride_type` | `Connect` for Connect groups; otherwise null |
 
 **Read** by `connect_merge.py` for existing rides in the run’s date range.
 
-**Delete** by `connect_merge.cleanup_absorbed_rides()` when small rides are merged into Connect.
+**Cleanup** happens inside `commit_matching_run` when small rides are merged into Connect.
 
-### `Matches` (read + insert + delete)
+### `Matches` (read + insert + transactional cleanup)
 
 One row per rider in a group. All riders in a group share the same `ride_id`.
 
@@ -93,7 +94,7 @@ One row per rider in a group. All riders in a group share the same `ride_id`.
 | `date`, `time` | Earliest-overlap date/time (DB persist) |
 | `earliest_time`, `latest_time` | Group window |
 | `source` | `"ml"` |
-| `voucher`, `contingency_voucher` | From voucher assignment |
+| `voucher`, `contingency_voucher` | From `public."Vouchers"` during production RPC commit |
 | `is_verified` | `false` on insert |
 | `is_subsidized` | `true` only if subsidized **and** date covered |
 | `uber_type` | `X` / `XL` / `XXL` or Connect |
@@ -112,6 +113,39 @@ Production runs only. Tracks scheduled and completed matcher executions.
 | `scheduled_for`, `started_at`, `finished_at` | Timing |
 | `run_id` | UUID per run |
 | `error_message` | Set on failure |
+
+### `MatchingRuns` (insert + update by RPC)
+
+Idempotency ledger for production commits. `commit_matching_run` creates and
+locks one row per `run_id` before making production writes.
+
+| Field | Role |
+|-------|------|
+| `run_id` | Primary key and idempotency key for one production commit |
+| `status` | `committing` while the transaction is active; `committed` after success |
+| `payload_hash` | Hash of the commit payload; prevents reusing a `run_id` with different data |
+| `commit_result` | JSON summary returned by the first successful commit |
+| `started_at`, `committed_at` | Commit timing |
+
+If the same `run_id` and payload are submitted again after a successful commit,
+the RPC returns the existing `commit_result` with `idempotent_replay = true`.
+If a statement fails during the RPC, Postgres rolls back the `MatchingRuns` row
+and all ride/match/flight/voucher cleanup changes from that attempt.
+
+### Integrity safeguards
+
+`documentation/sql/002_integrity_safeguards.sql` adds defensive database
+constraints and indexes for production state:
+
+- `Matches.ride_id` must reference `Rides.ride_id`
+- `Matches.flight_id` must reference `Flights.flight_id`
+- `Vouchers.used_by_run_id` must reference `MatchingRuns.run_id`
+- used vouchers must have a `used_by_run_id`
+- required match fields must be present
+- each flight may have at most one active `Matches` row
+
+The file includes diagnostic queries that should return no rows before applying
+the constraint/index section.
 
 ---
 
@@ -154,9 +188,34 @@ One row per unmatched rider in the run window.
 
 ---
 
+## `Vouchers` (production source of truth)
+
+One row per voucher. Production voucher assignment and consumption happens inside
+`commit_matching_run`, in the same database transaction as ride/match creation,
+flight updates, and Connect cleanup.
+
+| Field | Role |
+|-------|------|
+| `voucher_id` | Primary key |
+| `voucher_link` | Uber voucher URL/code inserted into `Matches` when assigned |
+| `airport`, `to_airport`, `contingency` | Eligibility filters |
+| `start_date`, `end_date` | Date eligibility window |
+| `used`, `used_at` | Consumption state |
+| `used_by_run_id` | Algorithm run that consumed the voucher |
+| `assigned_ride_id`, `assigned_flight_id` | Ride/flight assignment audit trail |
+| `import_batch_id` | Optional CSV import tracking |
+
 ## Voucher CSV
 
-Local pool under `vouchers/*.csv`.
+Local pool under `vouchers/*.csv`. CSV assignment is retained for dry-run/review
+output and import compatibility; production voucher state should come from
+`public."Vouchers"`.
+
+Use `Algorithm/import_vouchers.py` to validate and import CSV rows into
+`public."Vouchers"`. The legacy CSV `USED` column is not treated as production
+consumption state during import; imported rows are made available, and
+`commit_matching_run` records production consumption with `used_at`,
+`used_by_run_id`, `assigned_ride_id`, and `assigned_flight_id`.
 
 Expected columns (used by `vouchers.py`):
 

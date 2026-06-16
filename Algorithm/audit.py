@@ -6,13 +6,12 @@ from typing import Dict, List, Optional, Tuple
 
 import config as config
 from rider_data import RiderLite
+from time_windows import rider_interval
 
 
 # parse a rider window
 def _interval(r: RiderLite) -> Tuple[datetime, datetime]:
-    s = datetime.fromisoformat(f"{r.date}T{r.earliest_time}")
-    e = datetime.fromisoformat(f"{r.date}T{r.latest_time}")
-    return s, e
+    return rider_interval(r)
 
 # bags for rider
 def _bags_for(r: RiderLite) -> int:
@@ -28,18 +27,11 @@ def _bags_for_constrained(r: RiderLite) -> int:
         total += int(r.bag_no_personal or 0)
     return total
 
-def _are_same_flight_pair(a: RiderLite, b: RiderLite) -> bool:
-    """True if both riders are on the same flight (airline_iata + flight_no + date)."""
-    if a.flight_no is None or b.flight_no is None:
-        return False
-    key_a = ((a.airline_iata or "").upper(), a.flight_no, a.date)
-    key_b = ((b.airline_iata or "").upper(), b.flight_no, b.date)
-    return key_a == key_b
-
 
 # reason for blocking a PAIR (None => feasible)
 def pair_block_reason(a: RiderLite, b: RiderLite) -> Optional[str]:
-    a0, a1 = _interval(a); b0, b1 = _interval(b)
+    a0, a1 = _interval(a)
+    b0, b1 = _interval(b)
 
     # overlap with grace
     latest_start = max(a0, b0)
@@ -114,7 +106,6 @@ def build_scored_pairs_with_diag(
 def finalize_unmatched_diag(
     riders: List[RiderLite],
     bucket_key: Optional[str],
-    pairs: List[Tuple[int,int,float]],
     pair_diag: Dict[int, Dict[str,int]],
     feasible_count: Dict[int, int],
     used_indices: set,
