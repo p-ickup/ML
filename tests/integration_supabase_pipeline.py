@@ -135,6 +135,13 @@ class TestAlgorithmStatusTouchesSupabase(SupabaseIntegrationTestCase):
 
 class TestMainPipelineTouchesSupabase(SupabaseIntegrationTestCase):
     PIPELINE_DATE = "2099-01-15"
+    PERSISTENT_PIPELINE_DATE = "2099-11-17"
+    PERSISTENT_PARKED_DATE = "2000-01-01"
+    PERSISTENT_FLIGHT_IDS = tuple(range(9_000_000_000_101, 9_000_000_000_111))
+    PERSISTENT_EMAILS = tuple(
+        f"pickup-ml-persistent-pipeline-{index:02d}@example.com"
+        for index in range(1, 11)
+    )
 
     def _disable_connect_patch(self):
         return mock.patch.object(self.main.cp, "connect_enabled", return_value=False)
@@ -157,6 +164,228 @@ class TestMainPipelineTouchesSupabase(SupabaseIntegrationTestCase):
             if row.get("ride_id") is not None:
                 self.created_ride_ids.add(int(row["ride_id"]))
         return rows
+
+    def _persistent_auth_users_by_email(self, emails: set[str]) -> dict[str, str]:
+        found: dict[str, str] = {}
+        page = 1
+        per_page = 1000
+        while emails - found.keys():
+            try:
+                users = self.sb.auth.admin.list_users(page=page, per_page=per_page)
+            except Exception as exc:
+                self.fail(
+                    "Supabase auth admin list_users failed while locating persistent "
+                    f"pipeline fixtures: {type(exc).__name__}: {exc}"
+                )
+            for user in users:
+                email = getattr(user, "email", None)
+                user_id = getattr(user, "id", None)
+                if email in emails and user_id:
+                    found[email] = user_id
+            if len(users) < per_page:
+                break
+            page += 1
+        return found
+
+    def _ensure_persistent_pipeline_users(self) -> list[str]:
+        emails = set(self.PERSISTENT_EMAILS)
+        profiles = self._execute(
+            self.sb.table("Users").select("user_id,email").in_("email", sorted(emails)),
+            "select persistent pipeline Users",
+        ).data or []
+        user_ids_by_email = {
+            row["email"]: row["user_id"]
+            for row in profiles
+            if row.get("email") in emails
+        }
+
+        missing_emails = emails - user_ids_by_email.keys()
+        auth_users = self._persistent_auth_users_by_email(missing_emails) if missing_emails else {}
+        new_profiles = []
+        for index, email in enumerate(self.PERSISTENT_EMAILS, start=1):
+            if email in user_ids_by_email:
+                continue
+            user_id = auth_users.get(email)
+            if user_id is None:
+                try:
+                    response = self.sb.auth.admin.create_user(
+                        {
+                            "email": email,
+                            "password": "PickupMLPersistentPipeline-2026!",
+                            "email_confirm": True,
+                        }
+                    )
+                except Exception as exc:
+                    self.fail(
+                        "Supabase auth admin create_user failed for a persistent "
+                        f"pipeline fixture: {type(exc).__name__}: {exc}"
+                    )
+                user = getattr(response, "user", None)
+                user_id = getattr(user, "id", None)
+                if not user_id:
+                    self.fail("Persistent pipeline auth user creation returned no user id.")
+            user_ids_by_email[email] = user_id
+            new_profiles.append(
+                {
+                    "user_id": user_id,
+                    "firstname": f"MLPersistent{index:02d}",
+                    "lastname": "Integration",
+                    "school": "POMONA",
+                    "email": email,
+                    "sms_opt_in": False,
+                    "role": None,
+                    "admin_scope": None,
+                }
+            )
+
+        if new_profiles:
+            self._execute(
+                self.sb.table("Users").insert(new_profiles),
+                "insert persistent pipeline Users",
+            )
+        return [user_ids_by_email[email] for email in self.PERSISTENT_EMAILS]
+
+    def _delete_persistent_pipeline_matches(self) -> None:
+        flight_ids = list(self.PERSISTENT_FLIGHT_IDS)
+        existing_matches = self._execute(
+            self.sb.table("Matches").select("ride_id").in_("flight_id", flight_ids),
+            "select persistent pipeline Matches for cleanup",
+        ).data or []
+        ride_ids = {
+            int(row["ride_id"])
+            for row in existing_matches
+            if row.get("ride_id") is not None
+        }
+        self._execute(
+            self.sb.table("Matches").delete().in_("flight_id", flight_ids),
+            "cleanup persistent pipeline Matches",
+        )
+        if not ride_ids:
+            return
+
+        remaining = self._execute(
+            self.sb.table("Matches").select("ride_id").in_("ride_id", sorted(ride_ids)),
+            "check persistent pipeline Rides for remaining Matches",
+        ).data or []
+        retained_ride_ids = {
+            int(row["ride_id"])
+            for row in remaining
+            if row.get("ride_id") is not None
+        }
+        orphaned_ride_ids = sorted(ride_ids - retained_ride_ids)
+        if orphaned_ride_ids:
+            self._execute(
+                self.sb.table("Rides").delete().in_("ride_id", orphaned_ride_ids),
+                "cleanup persistent pipeline Rides",
+            )
+
+    def _persistent_pipeline_specs(self, user_ids: list[str]) -> list[dict]:
+        windows = [
+            ("LAX", "09:00:00", "11:00:00"),
+            ("LAX", "09:05:00", "10:55:00"),
+            ("LAX", "09:10:00", "10:50:00"),
+            ("LAX", "09:15:00", "10:45:00"),
+            ("LAX", "09:20:00", "10:40:00"),
+            ("LAX", "09:25:00", "10:35:00"),
+            ("LAX", "09:30:00", "10:30:00"),
+            ("ONT", "13:00:00", "15:00:00"),
+            ("ONT", "13:15:00", "14:45:00"),
+            ("LAX", "18:00:00", "19:00:00"),
+        ]
+        rows = []
+        for index, (flight_id, user_id, window) in enumerate(
+            zip(self.PERSISTENT_FLIGHT_IDS, user_ids, windows),
+            start=1,
+        ):
+            airport, earliest_time, latest_time = window
+            rows.append(
+                {
+                    "flight_id": flight_id,
+                    "user_id": user_id,
+                    "date": self.PERSISTENT_PIPELINE_DATE,
+                    "earliest_time": earliest_time,
+                    "latest_time": latest_time,
+                    "airport": airport,
+                    "to_airport": True,
+                    "terminal": "1",
+                    "matching_status": "submitted",
+                    "original_unmatched": False,
+                    "flight_no": 9100 + index,
+                    "airline_iata": "ZZ",
+                    "bag_no": 1,
+                    "bag_no_large": 0,
+                    "bag_no_personal": 0,
+                }
+            )
+        return rows
+
+    def _activate_persistent_pipeline_flights(self, user_ids: list[str]) -> list:
+        rows = self._persistent_pipeline_specs(user_ids)
+        existing = self._execute(
+            self.sb.table("Flights")
+            .select("flight_id,user_id")
+            .in_("flight_id", list(self.PERSISTENT_FLIGHT_IDS)),
+            "select persistent pipeline Flights",
+        ).data or []
+        expected_users = set(user_ids)
+        collisions = [row for row in existing if row.get("user_id") not in expected_users]
+        if collisions:
+            self.fail(
+                "Reserved persistent pipeline flight ids are already owned by "
+                f"non-test users: {[row['flight_id'] for row in collisions]}"
+            )
+
+        self._execute(
+            self.sb.table("Flights").upsert(rows, on_conflict="flight_id"),
+            "activate persistent pipeline Flights",
+        )
+        return [
+            self._rider(
+                user_id=row["user_id"],
+                flight_id=row["flight_id"],
+                date=row["date"],
+                earliest_time=row["earliest_time"],
+                latest_time=row["latest_time"],
+                airport=row["airport"],
+                to_airport=row["to_airport"],
+                terminal=row["terminal"],
+                matching_status=row["matching_status"],
+                label=f"Persistent {index:02d}",
+            )
+            for index, row in enumerate(rows, start=1)
+        ]
+
+    def _reset_persistent_pipeline_flights(self, target: str) -> None:
+        self._delete_persistent_pipeline_matches()
+        statuses = self._execute(
+            self.sb.table("AlgorithmStatus").select("id,run_id").eq("target", target),
+            "select persistent pipeline AlgorithmStatus for cleanup",
+        ).data or []
+        run_ids = [row["run_id"] for row in statuses if row.get("run_id")]
+        if run_ids:
+            self._execute(
+                self.sb.table("MatchingRuns").delete().in_("run_id", run_ids),
+                "cleanup persistent pipeline MatchingRuns",
+            )
+        if statuses:
+            self._execute(
+                self.sb.table("AlgorithmStatus").delete().in_(
+                    "id", [row["id"] for row in statuses]
+                ),
+                "cleanup persistent pipeline AlgorithmStatus",
+            )
+        self._execute(
+            self.sb.table("Flights")
+            .update(
+                {
+                    "date": self.PERSISTENT_PARKED_DATE,
+                    "matching_status": "submitted",
+                    "original_unmatched": False,
+                }
+            )
+            .in_("flight_id", list(self.PERSISTENT_FLIGHT_IDS)),
+            "park persistent pipeline Flights",
+        )
 
     def _assert_cross_midnight_pipeline_window(
         self,
@@ -240,6 +469,102 @@ class TestMainPipelineTouchesSupabase(SupabaseIntegrationTestCase):
         ).data or []
         self.assertTrue(all(row["matching_status"] == "matched" for row in flights))
         self.assertTrue(all(not row["original_unmatched"] for row in flights))
+
+    def test_persistent_ten_flight_pipeline_forms_connect_ont_and_unmatched(self):
+        target = self._target("persistent-ten-flight-pipeline")
+        flight_ids = list(self.PERSISTENT_FLIGHT_IDS)
+        lax_connect_ids = set(flight_ids[:7])
+        ont_group_ids = set(flight_ids[7:9])
+        unmatched_id = flight_ids[9]
+
+        try:
+            self._delete_persistent_pipeline_matches()
+            user_ids = self._ensure_persistent_pipeline_users()
+            riders = self._activate_persistent_pipeline_flights(user_ids)
+
+            self._run_pipeline_with_riders(
+                riders,
+                target=target,
+                TERMINAL_MODE="slack",
+                SAME_FLIGHT_PRIORITY=False,
+                CONNECT_ARRIVAL=[],
+                CONNECT_DEPARTURE=["LAX", "ONT"],
+                CONNECT_SIZE1=[6, 12],
+                CONNECT_SIZE2=[],
+            )
+
+            status = self._algorithm_status_for_target(target)
+            self.assertEqual(status["status"], "success")
+            self.assertIsNone(status["error_message"])
+            run_id = self._track_run_id(status)
+
+            matching_run = self._matching_run(run_id)
+            self.assertIsNotNone(matching_run)
+            self.assertEqual(matching_run["status"], "committed")
+            commit_result = matching_run["commit_result"]
+            self.assertEqual(commit_result["groups_inserted"], 2)
+            self.assertEqual(commit_result["matches_inserted"], 9)
+            self.assertEqual(commit_result["matched_flights_updated"], 9)
+            self.assertEqual(commit_result["unmatched_flights_updated"], 1)
+            self.assertEqual(commit_result["connect_cleanup_flights"], 0)
+
+            matches = self._assert_matches_for_flights(flight_ids, 9)
+            matches_by_flight = {int(row["flight_id"]): row for row in matches}
+            self.assertEqual(set(matches_by_flight), lax_connect_ids | ont_group_ids)
+            self.assertNotIn(unmatched_id, matches_by_flight)
+
+            lax_ride_ids = {
+                int(matches_by_flight[flight_id]["ride_id"])
+                for flight_id in lax_connect_ids
+            }
+            ont_ride_ids = {
+                int(matches_by_flight[flight_id]["ride_id"])
+                for flight_id in ont_group_ids
+            }
+            self.assertEqual(len(lax_ride_ids), 1)
+            self.assertEqual(len(ont_ride_ids), 1)
+            self.assertTrue(lax_ride_ids.isdisjoint(ont_ride_ids))
+
+            ride_ids = sorted(lax_ride_ids | ont_ride_ids)
+            rides = self._execute(
+                self.sb.table("Rides").select("ride_id,ride_type").in_("ride_id", ride_ids),
+                "verify persistent pipeline Rides",
+            ).data or []
+            rides_by_id = {int(row["ride_id"]): row for row in rides}
+            self.assertEqual(rides_by_id[next(iter(lax_ride_ids))]["ride_type"], "Connect")
+            self.assertIsNone(rides_by_id[next(iter(ont_ride_ids))]["ride_type"])
+
+            flights = self._execute(
+                self.sb.table("Flights")
+                .select("flight_id,matching_status,original_unmatched")
+                .in_("flight_id", flight_ids),
+                "verify persistent pipeline Flights",
+            ).data or []
+            self.assertEqual(len(flights), 10)
+            flights_by_id = {int(row["flight_id"]): row for row in flights}
+            for flight_id in lax_connect_ids | ont_group_ids:
+                self.assertEqual(flights_by_id[flight_id]["matching_status"], "matched")
+                self.assertFalse(flights_by_id[flight_id]["original_unmatched"])
+            self.assertEqual(flights_by_id[unmatched_id]["matching_status"], "unmatched")
+            self.assertTrue(flights_by_id[unmatched_id]["original_unmatched"])
+        finally:
+            self._reset_persistent_pipeline_flights(target)
+
+        remaining_matches = self._execute(
+            self.sb.table("Matches").select("flight_id").in_("flight_id", flight_ids),
+            "verify persistent pipeline Matches cleanup",
+        ).data or []
+        self.assertEqual(remaining_matches, [])
+        parked_flights = self._execute(
+            self.sb.table("Flights")
+            .select("date,matching_status,original_unmatched")
+            .in_("flight_id", flight_ids),
+            "verify persistent pipeline Flights parked",
+        ).data or []
+        self.assertEqual(len(parked_flights), 10)
+        self.assertTrue(all(row["date"] == self.PERSISTENT_PARKED_DATE for row in parked_flights))
+        self.assertTrue(all(row["matching_status"] == "submitted" for row in parked_flights))
+        self.assertTrue(all(not row["original_unmatched"] for row in parked_flights))
 
     def test_pipeline_cross_midnight_large_window_persists_normalized_match_window(self):
         rider_a = self._create_pipeline_rider(

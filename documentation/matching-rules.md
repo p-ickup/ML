@@ -103,8 +103,11 @@ CONNECT_SIZE2 = [12, 24]             # preferred when possible
 Applied in `main.apply_group_subsidy()` **after** final group list (including Connect merge).
 
 ```python
-thresholds = {"LAX": 3, "ONT": 2}   # in main.py, not config.py
+SUBSIDY_MIN_GROUP_SIZE = {"LAX": 3, "ONT": 2}  # config.py
 ```
+
+Change either airport value independently to adjust the minimum subsidized
+group size without changing matching logic.
 
 | Requirement | Detail |
 |-------------|--------|

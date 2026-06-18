@@ -9,22 +9,22 @@ from tests.integration_supabase_base import SupabaseIntegrationTestCase
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TEST_IMPORT_CSV = REPO_ROOT / "vouchers" / "TestImport.csv"
+TEST_VOUCHERS_CSV = REPO_ROOT / "tests" / "fixtures" / "TestVouchers.csv"
 
 
 class TestVoucherImportTouchesSupabase(SupabaseIntegrationTestCase):
-    def test_test_import_csv_populates_vouchers_table(self):
+    def test_tracked_voucher_fixture_populates_vouchers_table(self):
         batch_id = f"33333333-3333-3333-3333-{int(self.run_suffix) % 1_000_000_000_000:012d}"
         self.import_batch_ids.append(batch_id)
         expected_rows = import_vouchers.build_voucher_rows(
-            str(TEST_IMPORT_CSV),
+            str(TEST_VOUCHERS_CSV),
             import_batch_id=batch_id,
         )
         expected_links = [row["voucher_link"] for row in expected_rows]
 
         result = import_vouchers.import_voucher_csv(
             self.sb,
-            str(TEST_IMPORT_CSV),
+            str(TEST_VOUCHERS_CSV),
             import_batch_id=batch_id,
             batch_size=2,
         )
@@ -39,7 +39,7 @@ class TestVoucherImportTouchesSupabase(SupabaseIntegrationTestCase):
                 "assigned_ride_id,assigned_flight_id,import_batch_id"
             )
             .in_("voucher_link", expected_links),
-            "verify TestImport voucher rows",
+            "verify TestVouchers fixture rows",
         )
 
         rows = imported.data or []

@@ -278,15 +278,16 @@ def _merge_pool(
     old_ride_by_flight: Dict[int, int],
     new_match_ride_by_flight: Dict[int, int],
 ) -> Tuple[List[Match], List[RiderLite]]:
+    _tag_source_ride_ids(pool, old_ride_by_flight, new_match_ride_by_flight)
+
     min_size, _ = cp.connect_search_bounds()
     if min_size is None or len(pool) < min_size:
         return [], list(pool)
 
-    _tag_source_ride_ids(pool, old_ride_by_flight, new_match_ride_by_flight)
     matched_by_ride: Dict[int, List[RiderLite]] = {}
     for r in pool:
         sid = getattr(r, "source_ride_id", None)
-        if sid is not None and int(sid) > 0:
+        if sid is not None:
             matched_by_ride.setdefault(int(sid), []).append(r)
 
     connect_matches: List[Match] = []
@@ -325,6 +326,7 @@ def merge_connect_with_existing(
     run_riders: List[RiderLite] = []
     other_matches: List[Match] = []
 
+    next_synthetic_source_id = -1
     for m in all_matches:
         if getattr(m, "ride_type", None) == "Connect":
             other_matches.append(m)
@@ -332,9 +334,11 @@ def merge_connect_with_existing(
         if not m.riders or not cp.rider_in_connect_scope(m.riders[0]):
             other_matches.append(m)
             continue
+        source_id = next_synthetic_source_id
+        next_synthetic_source_id -= 1
         for r in m.riders:
             run_riders.append(r)
-            new_match_ride_by_flight[r.flight_id] = -1
+            new_match_ride_by_flight[r.flight_id] = source_id
 
     run_riders.extend(r for r in all_unmatched if cp.rider_in_connect_scope(r))
 
@@ -365,14 +369,20 @@ def merge_connect_with_existing(
         leftover_riders.extend(lo)
 
     leftover_matches: List[Match] = []
-    by_source: Dict[Optional[int], List[RiderLite]] = {}
+    by_source: Dict[int, List[RiderLite]] = {}
+    still_unmatched: List[RiderLite] = []
     for r in leftover_riders:
         sid = getattr(r, "source_ride_id", None)
-        src_key = int(sid) if sid is not None and int(sid) > 0 else None
-        by_source.setdefault(src_key, []).append(r)
+        if sid is None:
+            still_unmatched.append(r)
+            continue
+        by_source.setdefault(int(sid), []).append(r)
 
-    still_unmatched: List[RiderLite] = []
-    for _, group in by_source.items():
+    for source_id, group in by_source.items():
+        # Positive IDs are already-persisted rides. If they were not selected
+        # into a Connect group, leave them untouched in the database.
+        if source_id > 0:
+            continue
         if len(group) >= 2 and _common_window_riders(group):
             leftover_matches.append(_group_to_match(group, bucket_key=cp.bucket_key_for_rider(group[0])))
         else:
