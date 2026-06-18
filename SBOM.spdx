@@ -1,34 +1,20 @@
 SPDXVersion: SPDX-2.3
 DataLicense: CC0-1.0
 SPDXID: SPDXRef-DOCUMENT
-DocumentName: 62410/github.com/p-ickup/ML-2a4b0bd36c46182a38c91b95e1391022bd178f82
-DocumentNamespace: https://blob.fossa.io.s3.us-east-1.amazonaws.com/blob.fossa.io/FOSSA_BOMS/custom%2B62410%2Fgithub.com%2Fp-ickup%2FML%242a4b0bd36c46182a38c91b95e1391022bd178f82
+DocumentName: 62410/github.com/p-ickup/ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7
+DocumentNamespace: 62410/github.com/p-ickup/ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7
 Creator: Organization: PICKUP
-Creator: Person: pickup.pai.47@gmail.com
-Creator: Tool: FOSSA 4.33.64
-Created: 2026-05-21T07:33:22Z
+Creator: Tool: FOSSA 4.34.6
+Created: 2026-06-18T01:18:14Z
 LicenseListVersion: 3.23
 DocumentDescribes: SPDXRef-pip-pandas-3.0.3
+DocumentDescribes: SPDXRef-pip-pip-audit-2.10.1
 DocumentDescribes: SPDXRef-pip-python-dotenv-1.2.2
-DocumentDescribes: SPDXRef-pip-supabase-2.30.0
+DocumentDescribes: SPDXRef-pip-ruff-0.15.17
+DocumentDescribes: SPDXRef-pip-supabase-2.31.0
+DocumentDescribes: SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7
 
 #### Packages
-
-PackageName: https://github.com/p-ickup/ML.git
-SPDXID: SPDXRef-custom-62410-github.com-p-ickup-ML-2a4b0bd36c46182a38c91b95e1391022bd178f82
-PackageVersion: 2a4b0bd36c46182a38c91b95e1391022bd178f82
-FilesAnalyzed: true
-PackageFileName: custom+62410/github.com/p-ickup/ML$2a4b0bd36c46182a38c91b95e1391022bd178f82
-PackageOriginator: NOASSERTION
-PackageSupplier: Organization: PICKUP
-PackageLicenseDeclared: NONE
-PackageCopyrightText: NONE
-PackageDownloadLocation: NOASSERTION
-PackageLicenseConcluded: NOASSERTION
-PackageChecksum: MD5: b74e67812d1a2d01628be1748d547c65
-PackageChecksum: SHA1: 50723d15cba0776d044590c2033817aeebd8c68c
-PackageChecksum: SHA256: 3b3f2a29e1d5a63d7a741c9a2076f311886218626e2b6a9870135c99d308f00e
-
 
 PackageName: pandas
 SPDXID: SPDXRef-pip-pandas-3.0.3
@@ -36,110 +22,39 @@ PackageVersion: 3.0.3
 FilesAnalyzed: true
 PackageOriginator: Organization: Pip
 PackageSupplier: Person: The Pandas Development Team <pandas-dev@python.org>
+PackageSummary: Powerful data structures for data analysis, time series, and statistics
 PackageLicenseDeclared: BSD-3-Clause OR Apache-2.0 OR TCL OR BSD-2-Clause OR Python-2.0 OR MIT OR 0BSD
 PackageCopyrightText: <text>2008-2011 AQR Capital Management, LLC, Lambda Foundry, Inc. and PyData Development Team
 	2017 Paul Ganssle <paul@ganssle.io>
 	2014 Electronic Arts Inc.
 	2008-2011 AQR Capital Management, LLC
 	2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010 
-	2019 Hadley Wickham; RStudio; and Evan Miller
-	2017 dateutil contributors (see AUTHORS file)
-	2003-2011 Gustavo Niemeyer <gustavo@niemeyer.net>
-	2012-2014 Tomi Pieviläinen <tomi.pievilainen@iki.fi>
-	2014-2016 Yaron de Leeuw <me@jarondl.net>
-	2015 Paul Ganssle <paul@ganssle.io>
-	2015 dateutil contributors (see AUTHORS file)
-	2011-2026 Open source contributors.
-	2011-2013 ESN Social Software AB and Jonas Tarnstrom
-	2007 Nick Galbreath -- nickg [at] modp [dot] com. All rights
-	1988-1993 The Regents of the University of California.
-	1994 Sun Microsystems, Inc.
-	2005-2023 NumPy Developers.
-	2012 Lambda Foundry, Inc., except where noted
-	2002 Michael Ringgaard. All rights reserved.
-	2014 Al Sweigart
-	2005, 2006, 2007 
-	 Donald Stufft and individual contributors.
-	2016 PyData Development Team
-	2005-2011 NumPy Developers
-	2010-2019 Keith Goodman
-	2019 Bottleneck Developers
-	2020 PyData Development Team
-	2011-2012 Lambda Foundry, Inc.
-	2011-2012 PyData Development Team
-	 Policy
-	 model. Each contributor maintains copyright
-	 of any single
-	 of the
-	 to,
-	2012 PyData Development Team
-	2011 by Enthought, Inc.
-	 i.e., "Copyright (c)
-	 
-	1991 - 1995 Stichting Mathematisch Centrum Amsterdam,
-	2008 Attractive Chaos <attractor@live.co.uk>
-	2005-2020 Rich Felker, et al.
-	2001-2008 Ville Laurikari and licensed
-	1993,2004 Sun Microsystems or
-	2003-2011 David Schultz or
-	2003-2009 Steven G. Kargl or
-	2003-2009 Bruce D. Evans or
-	2008 Stephen L. Moshier or
-	2017-2018 Arm Limited
-	2008 
-	1999-2019 Arm Limited.
-	1994 David Burren. It is licensed under a BSD license.
-	2011 
-	 comments are original works
-	2017 Anthony Sottile
-	2015-2019 Jared Hobbs
-	2023 PyData Development Team
-	2012 Lambda Foundry, Inc., except where noted
-	2012 Lambda Foundry, Inc.
-	 Appender("Copyright (c) 2009", join='\n')
-	2009 join='\n')</text>
+	2019 Hadley Wickham; RStudio; and Evan Miller</text>
 PackageDownloadLocation: https://files.pythonhosted.org/packages/f8/87/4341c6252d1c47b08768c3d25ac487362bf403f0313ddae4a2a26c9b1b4c/pandas-3.0.3.tar.gz
+PackageHomePage: https://pypi.org/project/pandas/
 PackageLicenseConcluded: NOASSERTION
 ExternalRef: PACKAGE-MANAGER purl pkg:pypi/pandas@3.0.3
 PackageChecksum: MD5: abe9b0a7da8cf52fc14a1526e9688a92
 PackageChecksum: SHA1: dd5a6a1ae84ad68f2477fa6f9d131de9f51be5c9
 PackageChecksum: SHA256: d56e7b59600fac3316bfac4c3e700a163b4a5ff1fd749064f595573944ee43ce
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-PSF-LICENSE
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-PACKAGING-LICENSE
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-util-version-init-.py
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-DATEUTIL-LICENSE
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-skiplist.h
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-numpy-datetime-np-datetime.c
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-BOTTLENECK-LICENCE
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-portable.h
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-datetime-pd-datetime.c
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-parser-io.h
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-datetime-date-conversions.c
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-parser-io.c
-HasFile: SPDXRef-pip-pandas-3.0.3-AUTHORS.md
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-vendored-numpy-datetime-np-datetime.h
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-numpy-datetime-np-datetime-strings.c
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-vendored-numpy-datetime-np-datetime-strings.h
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-datetime-pd-datetime.h
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-datetime-date-conversions.h
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSE
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-lib-ultrajsonenc.c
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-NUMPY-LICENSE
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-parser-tokenizer.c
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-python-objToJSON.c
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-PYPERCLIP-LICENSE
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-vendored-ujson-lib-ultrajson.h
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-python-ujson.c
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-ULTRAJSON-LICENSE
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-python-JSONtoObj.c
-HasFile: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-lib-ultrajsondec.c
-HasFile: SPDXRef-pip-pandas-3.0.3-PKG-INFO
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-HAVEN-MIT
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-KLIB-LICENSE
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-HAVEN-LICENSE
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-MUSL-LICENSE
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-PYUPGRADE-LICENSE
-HasFile: SPDXRef-pip-pandas-3.0.3-LICENSES-SAS7BDAT-LICENSE
+
+
+PackageName: pip-audit
+SPDXID: SPDXRef-pip-pip-audit-2.10.1
+PackageVersion: 2.10.1
+FilesAnalyzed: true
+PackageOriginator: Organization: Pip
+PackageSupplier: Person: Dustin Ingram <di@python.org>, William Woodruff <william@trailofbits.com>
+PackageSummary: A tool for scanning Python environments for known vulnerabilities
+PackageLicenseDeclared: Apache-2.0
+PackageCopyrightText: NONE
+PackageDownloadLocation: https://files.pythonhosted.org/packages/66/a4/f21d5f0a0edabcbce31560b73c7c5a6f72ae87af4236fd1069c8f59a353d/pip_audit-2.10.1.tar.gz
+PackageHomePage: https://pypi.org/project/pip-audit/
+PackageLicenseConcluded: NOASSERTION
+ExternalRef: PACKAGE-MANAGER purl pkg:pypi/pip-audit@2.10.1
+PackageChecksum: MD5: 8de9001f00dfcb9871d710c11ec9668c
+PackageChecksum: SHA1: ffaaa5b2ad157fa6c7e301fd37f53de3f8c5ca07
+PackageChecksum: SHA256: baa5a4a825f0016a78e59a1be33e8888abc46b3bea4ad671a4bc7cd636467f1e
 
 
 PackageName: python-dotenv
@@ -148,487 +63,574 @@ PackageVersion: 1.2.2
 FilesAnalyzed: true
 PackageOriginator: Organization: Pip
 PackageSupplier: Person: Saurabh Kumar <me+github@saurabh-kumar.com>
+PackageSummary: Read key-value pairs from a .env file and set them as environment variables
 PackageLicenseDeclared: BSD-3-Clause
 PackageCopyrightText: 2014 Saurabh Kumar (python-dotenv), 2013, Ted Tieken (django-dotenv-rw), 2013, Jacob Kaplan-Moss (django-dotenv)
 PackageDownloadLocation: https://files.pythonhosted.org/packages/82/ed/0301aeeac3e5353ef3d94b6ec08bbcabd04a72018415dcb29e588514bba8/python_dotenv-1.2.2.tar.gz
+PackageHomePage: https://pypi.org/project/python-dotenv/
 PackageLicenseConcluded: NOASSERTION
 ExternalRef: PACKAGE-MANAGER purl pkg:pypi/python-dotenv@1.2.2
 PackageChecksum: MD5: 216272d8b0994d1341d5fa078f8235b9
 PackageChecksum: SHA1: 1ced947fb51c466f4ec2e30298ed20f0a103fbe1
 PackageChecksum: SHA256: 743b02f331876669d9e5b37487cecdfc57a8500b9608f4d9470399a74e85f92f
-HasFile: SPDXRef-pip-python-dotenv-1.2.2-LICENSE
-HasFile: SPDXRef-pip-python-dotenv-1.2.2-docs-license.md
+
+
+PackageName: ruff
+SPDXID: SPDXRef-pip-ruff-0.15.17
+PackageVersion: 0.15.17
+FilesAnalyzed: true
+PackageOriginator: Organization: Pip
+PackageSupplier: Person: "Astral Software Inc." <hey@astral.sh>
+PackageSummary: <text>An extremely fast Python linter and code formatter, written in Rust.
+
+GPL license: False-positive standalone GPL classification. The detected robotparser code is dual-licensed under GPL-2.0-only OR Python-2.0. PICKUP elects Python-2.0. Ruff 0.15.17 is MIT-licensed and is used only as a separate development/CI tool.</text>
+PackageLicenseDeclared: LicenseRef-MIT-84709328
+PackageCopyrightText: <text>2022 Charles Marsh
+	2020 The TensorFlow Authors."
+	1999-2003 Steve Purcell</text>
+PackageLicenseInfoFromFiles: LicenseRef-Apache-2.0-84709329 LicenseRef-Python-2.0-84709330
+PackageDownloadLocation: https://files.pythonhosted.org/packages/8c/a9/3abdf488f1bf3d24c699415e454ed554a6350d5d89ce183be1ee0a3361ac/ruff-0.15.17.tar.gz
+PackageHomePage: https://docs.astral.sh/ruff
+PackageLicenseConcluded: NOASSERTION
+ExternalRef: PACKAGE-MANAGER purl pkg:pypi/ruff@0.15.17
+PackageChecksum: MD5: 1993b1e152f4d125812e4c64677fc426
+PackageChecksum: SHA1: 696759ec066fc525c5694c486b0d640aa26dca6f
+PackageChecksum: SHA256: d7eed02567d2c8c39442bfcbe10c08ff5d4ce7f794af9ce8b6fa5fd02feb938a
 
 
 PackageName: supabase
-SPDXID: SPDXRef-pip-supabase-2.30.0
-PackageVersion: 2.30.0
+SPDXID: SPDXRef-pip-supabase-2.31.0
+PackageVersion: 2.31.0
 FilesAnalyzed: true
 PackageOriginator: Organization: Pip
 PackageSupplier: Person: Joel Lee <joel@joellee.org>, Leon Fedden <leonfedden@gmail.com>, Daniel Reinón García <danielreinon@outlook.com>, Leynier Gutiérrez González <leynier41@gmail.com>, Andrew Smith <a.smith@silentworks.co.uk>
+PackageSummary: Supabase client for Python.
 PackageLicenseDeclared: MIT
 PackageCopyrightText: 2020 Supabase
-PackageDownloadLocation: https://files.pythonhosted.org/packages/5c/a6/d2b17021c2db1a9d219c383e0762ac03a62b25468e61ab126b6b561c2f21/supabase-2.30.0.tar.gz
+PackageDownloadLocation: https://files.pythonhosted.org/packages/fe/8e/54a2f950629689b1613434a61fc3bff5f92f84ba6b20213f5b2add05c1bb/supabase-2.31.0.tar.gz
+PackageHomePage: https://pypi.org/project/supabase/
 PackageLicenseConcluded: NOASSERTION
-ExternalRef: PACKAGE-MANAGER purl pkg:pypi/supabase@2.30.0
-PackageChecksum: MD5: 055ff243fc76156b3927bb8596bde310
-PackageChecksum: SHA1: 6a6faf0861412c76cb768dbbbe446f05379d4267
-PackageChecksum: SHA256: a8fc99d89dbc10f1a633cb121fedfcd660bb6eb3281b146f1839654c97526e71
-HasFile: SPDXRef-pip-supabase-2.30.0-LICENSE
+ExternalRef: PACKAGE-MANAGER purl pkg:pypi/supabase@2.31.0
+PackageChecksum: MD5: 8577e2859085d4b3b41e0eac6a90bbd4
+PackageChecksum: SHA1: ff31a623a8f23f005a706d20784780d1edaf20b0
+PackageChecksum: SHA256: c9db68c508b432812f3ffcd247ac710c976878d4026f5ca78969a6995a6863d0
+
+
+PackageName: https://github.com/p-ickup/ML.git
+SPDXID: SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7
+PackageVersion: 5a48091a9ac46122482fc8372d502fc93e1ad1a7
+FilesAnalyzed: true
+PackageFileName: custom+62410/github.com/p-ickup/ML$5a48091a9ac46122482fc8372d502fc93e1ad1a7
+PackageOriginator: NOASSERTION
+PackageSupplier: Organization: PICKUP
+PackageSummary: NOASSERTION
+PackageLicenseDeclared: NONE
+PackageCopyrightText: NONE
+PackageDownloadLocation: NOASSERTION
+PackageHomePage: NOASSERTION
+PackageLicenseConcluded: NOASSERTION
+PackageChecksum: MD5: e288c62a9124890999cd8181ee7c011e
+PackageChecksum: SHA1: 2f89f3e186a146b42dc22d221894f0a9b138191b
+PackageChecksum: SHA256: fae74d62d7efbe15d141d371636906e23ca1dd9f9755ecf16ccf0bd01127dcd2
+
+
+
+#### License Information
+
+LicenseID: LicenseRef-MIT-84709328
+LicenseName: MIT
+ExtractedText: MIT License
+	
+	Copyright (c) 2022 Charles Marsh
+	
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+	
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+	
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+	
+	end of terms and conditions
+	
+	The externally maintained libraries from which parts of the Software is derived
+	are:
+	
+	- autoflake, licensed as follows:
+	  """
+	    Copyright (C) 2012-2018 Steven Myint
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy of
+	    this software and associated documentation files (the "Software"), to deal in
+	    the Software without restriction, including without limitation the rights to
+	    use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+	    of the Software, and to permit persons to whom the Software is furnished to do
+	    so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in all
+	    copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	    SOFTWARE.
+	  """
+	
+	- autotyping, licensed as follows:
+	  """
+	    MIT License
+	
+	    Copyright (c) 2023 Jelle Zijlstra
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy
+	    of this software and associated documentation files (the "Software"), to deal
+	    in the Software without restriction, including without limitation the rights
+	    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	    copies of the Software, and to permit persons to whom the Software is
+	    furnished to do so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in all
+	    copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	    SOFTWARE.
+	  """
+	
+	- Flake8, licensed as follows:
+	  """
+	    == Flake8 License (MIT) ==
+	
+	    Copyright (C) 2011-2013 Tarek Ziade <tarek@ziade.org>
+	    Copyright (C) 2012-2016 Ian Cordasco <graffatcolmingov@gmail.com>
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy of
+	    this software and associated documentation files (the "Software"), to deal in
+	    the Software without restriction, including without limitation the rights to
+	    use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+	    of the Software, and to permit persons to whom the Software is furnished to do
+	    so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in all
+	    copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	    SOFTWARE.
+	  """
+	
+	- flake8-eradicate, licensed as follows:
+	  """
+	    MIT License
+	
+	    Copyright (c) 2018 Nikita Sobolev
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy
+	    of this software and associated documentation files (the "Software"), to deal
+	    in the Software without restriction, including without limitation the rights
+	    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	    copies of the Software, and to permit persons to whom the Software is
+	    furnished to do so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in all
+	    copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	    SOFTWARE.
+	  """
+	
+	- flake8-pyi, licensed as follows:
+	  """
+	    The MIT License (MIT)
+	
+	    Copyright (c) 2016 Łukasz Langa
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy
+	    of this software and associated documentation files (the "Software"), to deal
+	    in the Software without restriction, including without limitation the rights
+	    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	    copies of the Software, and to permit persons to whom the Software is
+	    furnished to do so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in all
+	    copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	    SOFTWARE.
+	  """
+	
+	- flake8-simplify, licensed as follows:
+	  """
+	    MIT License
+	
+	    Copyright (c) 2020 Martin Thoma
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy
+	    of this software and associated documentation files (the "Software"), to deal
+	    in the Software without restriction, including without limitation the rights
+	    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	    copies of the Software, and to permit persons to whom the Software is
+	    furnished to do so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in all
+	    copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	    SOFTWARE.
+	  """
+	
+	- isort, licensed as follows:
+	  """
+	    The MIT License (MIT)
+	
+	    Copyright (c) 2013 Timothy Edmund Crosley
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy
+	    of this software and associated documentation files (the "Software"), to deal
+	    in the Software without restriction, including without limitation the rights
+	    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	    copies of the Software, and to permit persons to whom the Software is
+	    furnished to do so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in
+	    all copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	    THE SOFTWARE.
+	  """
+	
+	- pygrep-hooks, licensed as follows:
+	  """
+	    Copyright (c) 2018 Anthony Sottile
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy
+	    of this software and associated documentation files (the "Software"), to deal
+	    in the Software without restriction, including without limitation the rights
+	    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	    copies of the Software, and to permit persons to whom the Software is
+	    furnished to do so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in
+	    all copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	    THE SOFTWARE.
+	  """
+	
+	- pycodestyle, licensed as follows:
+	  """
+	    Copyright © 2006-2009 Johann C. Rocholl <johann@rocholl.net>
+	    Copyright © 2009-2014 Florent Xicluna <florent.xicluna@gmail.com>
+	    Copyright © 2014-2020 Ian Lee <IanLee1521@gmail.com>
+	
+	    Licensed under the terms of the Expat License
+	
+	    Permission is hereby granted, free of charge, to any person
+	    obtaining a copy of this software and associated documentation files
+	    (the "Software"), to deal in the Software without restriction,
+	    including without limitation the rights to use, copy, modify, merge,
+	    publish, distribute, sublicense, and/or sell copies of the Software,
+	    and to permit persons to whom the Software is furnished to do so,
+	    subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be
+	    included in all copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+	    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+	    NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+	    BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+	    ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+	    CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	    SOFTWARE.
+	  """
+	
+	- pydocstyle, licensed as follows:
+	  """
+	    Copyright (c) 2012 GreenSteam, <http://greensteam.dk/>
+	
+	    Copyright (c) 2014-2020 Amir Rachum, <http://amir.rachum.com/>
+	
+	    Copyright (c) 2020 Sambhav Kothari, <https://github.com/samj1912>
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy of
+	    this software and associated documentation files (the "Software"), to deal in
+	    the Software without restriction, including without limitation the rights to
+	    use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+	    of the Software, and to permit persons to whom the Software is furnished to do
+	    so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in all
+	    copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	    SOFTWARE.
+	  """
+	
+	- Pyflakes, licensed as follows:
+	  """
+	    Copyright 2005-2011 Divmod, Inc.
+	    Copyright 2013-2014 Florent Xicluna
+	
+	    Permission is hereby granted, free of charge, to any person obtaining
+	    a copy of this software and associated documentation files (the
+	    "Software"), to deal in the Software without restriction, including
+	    without limitation the rights to use, copy, modify, merge, publish,
+	    distribute, sublicense, and/or sell copies of the Software, and to
+	    permit persons to whom the Software is furnished to do so, subject to
+	    the following conditions:
+	
+	    The above copyright notice and this permission notice shall be
+	    included in all copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+	    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+	    NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+	    LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+	    OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+	    WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+	  """
+	
+	- Pyright, licensed as follows:
+	  """
+	    MIT License
+	
+	    Pyright - A static type checker for the Python language
+	    Copyright (c) Microsoft Corporation. All rights reserved.
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy
+	    of this software and associated documentation files (the "Software"), to deal
+	    in the Software without restriction, including without limitation the rights
+	    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	    copies of the Software, and to permit persons to whom the Software is
+	    furnished to do so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in all
+	    copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	    SOFTWARE
+	  """
+	
+	- pyupgrade, licensed as follows:
+	  """
+	    Copyright (c) 2017 Anthony Sottile
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy
+	    of this software and associated documentation files (the "Software"), to deal
+	    in the Software without restriction, including without limitation the rights
+	    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	    copies of the Software, and to permit persons to whom the Software is
+	    furnished to do so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in
+	    all copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	    THE SOFTWARE.
+	  """
+	
+	- rome/tools, licensed under the MIT license:
+	  """
+	    MIT License
+	
+	    Copyright (c) Rome Tools, Inc. and its affiliates.
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy
+	    of this software and associated documentation files (the "Software"), to deal
+	    in the Software without restriction, including without limitation the rights
+	    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	    copies of the Software, and to permit persons to whom the Software is
+	    furnished to do so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in all
+	    copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	    SOFTWARE.
+	  """
+	
+	- RustPython, licensed as follows:
+	  """
+	    MIT License
+	
+	    Copyright (c) 2020 RustPython Team
+	
+	    Permission is hereby granted, free of charge, to any person obtaining a copy
+	    of this software and associated documentation files (the "Software"), to deal
+	    in the Software without restriction, including without limitation the rights
+	    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	    copies of the Software, and to permit persons to whom the Software is
+	    furnished to do so, subject to the following conditions:
+	
+	    The above copyright notice and this permission notice shall be included in all
+	    copies or substantial portions of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	    SOFTWARE.
+	  """
+	
+	- rust-analyzer/text-size, licensed under the MIT license:
+	  """
+	    Permission is hereby granted, free of charge, to any
+	    person obtaining a copy of this software and associated
+	    documentation files (the "Software"), to deal in the
+	    Software without restriction, including without
+	    limitation the rights to use, copy, modify, merge,
+	    publish, distribute, sublicense, and/or sell copies of
+	    the Software, and to permit persons to whom the Software
+	    is furnished to do so, subject to the following
+	    conditions:
+	
+	    The above copyright notice and this permission notice
+	    shall be included in all copies or substantial portions
+	    of the Software.
+	
+	    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+	    ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+	    TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+	    PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+	    SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+	    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+	    OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+	    IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+	    DEALINGS IN THE SOFTWARE.
+	  """
+	
+
+
+LicenseID: LicenseRef-Apache-2.0-84709329
+LicenseName: Apache-2.0
+ExtractedText: Copyright 2020 The TensorFlow Authors."
+	
+	Licensed under the Apache License, Version 2.0 (the "License");
+	you may not use this file except in compliance with the License.
+	You may obtain a copy of the License at
+	
+	http://www.apache.org/licenses/LICENSE-2.0
+	
+	Unless required by applicable law or agreed to in writing, software
+	distributed under the License is distributed on an "AS IS" BASIS,
+	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+	
+	See the License for the specific language governing permissions and limitations under the License.
+
+
+LicenseID: LicenseRef-Python-2.0-84709330
+LicenseName: Python-2.0
+ExtractedText: 1. This LICENSE AGREEMENT is between the Python Software Foundation ("PSF"), and the Individual or Organization ("Licensee") accessing and otherwise using this software ("Python") in source or binary form and its associated documentation.
+	   2. Subject to the terms and conditions of this License Agreement, PSF hereby grants Licensee a nonexclusive, royalty-free, world-wide license to reproduce, analyze, test, perform and/or display publicly, prepare derivative works, distribute, and otherwise use Python alone or in any derivative version, provided, however, that PSF's License Agreement and PSF's notice of copyright, i.e., "Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006 Python Software Foundation; All Rights Reserved" are retained in Python alone or in any derivative version prepared by Licensee.
+	   3. In the event Licensee prepares a derivative work that is based on or incorporates Python or any part thereof, and wants to make the derivative work available to others as provided herein, then Licensee hereby agrees to include in any such work a brief summary of the changes made to Python.
+	   4. PSF is making Python available to Licensee on an "AS IS" basis. PSF MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR IMPLIED. BY WAY OF EXAMPLE, BUT NOT LIMITATION, PSF MAKES NO AND DISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF PYTHON WILL NOT INFRINGE ANY THIRD PARTY RIGHTS.
+	   5. PSF SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF PYTHON FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS A RESULT OF MODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON, OR ANY DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.
+	   6. This License Agreement will automatically terminate upon a material breach of its terms and conditions.
+	   7. Nothing in this License Agreement shall be deemed to create any relationship of agency, partnership, or joint venture between PSF and Licensee. This License Agreement does not grant permission to use PSF trademarks or trade name in a trademark sense to endorse or promote products or services of Licensee, or any third party.
+	   8. By copying, installing or otherwise using Python, Licensee agrees to be bound by the terms and conditions of this License Agreement.
+	   1. This LICENSE AGREEMENT is between BeOpen.com ("BeOpen"), having an office at 160 Saratoga Avenue, Santa Clara, CA 95051, and the Individual or Organization ("Licensee") accessing and otherwise using this software in source or binary form and its associated documentation ("the Software").
+	   2. Subject to the terms and conditions of this BeOpen Python License Agreement, BeOpen hereby grants Licensee a non-exclusive, royalty-free, world-wide license to reproduce, analyze, test, perform and/or display publicly, prepare derivative works, distribute, and otherwise use the Software alone or in any derivative version, provided, however, that the BeOpen Python License is retained in the Software, alone or in any derivative version prepared by Licensee.
+	   3. BeOpen is making the Software available to Licensee on an "AS IS" basis. BEOPEN MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR IMPLIED. BY WAY OF EXAMPLE, BUT NOT LIMITATION, BEOPEN MAKES NO AND DISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF THE SOFTWARE WILL NOT INFRINGE ANY THIRD PARTY RIGHTS.
+	   4. BEOPEN SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF THE SOFTWARE FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS A RESULT OF USING, MODIFYING OR DISTRIBUTING THE SOFTWARE, OR ANY DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.
+	   5. This License Agreement will automatically terminate upon a material breach of its terms and conditions.
+	   6. This License Agreement shall be governed by and interpreted in all respects by the law of the State of California, excluding conflict of law provisions. Nothing in this License Agreement shall be deemed to create any relationship of agency, partnership, or joint venture between BeOpen and Licensee. This License Agreement does not grant permission to use BeOpen trademarks or trade names in a trademark sense to endorse or promote products or services of Licensee, or any third party. As an exception, the "BeOpen Python" logos available at http://www.pythonlabs.com/logos.html may be used according to the permissions granted on that web page.
+	   7. By copying, installing or otherwise using the software, Licensee agrees to be bound by the terms and conditions of this License Agreement.
+	   1. This LICENSE AGREEMENT is between the Corporation for National Research Initiatives, having an office at 1895 Preston White Drive, Reston, VA 20191 ("CNRI"), and the Individual or Organization ("Licensee") accessing and otherwise using Python 1.6, beta 1 software in source or binary form and its associated documentation, as released at the www.python.org Internet site on August 4, 2000 ("Python 1.6b1").
+	   2. Subject to the terms and conditions of this License Agreement, CNRI hereby grants Licensee a non-exclusive, royalty-free, world-wide license to reproduce, analyze, test, perform and/or display publicly, prepare derivative works, distribute, and otherwise use Python 1.6b1 alone or in any derivative version, provided, however, that CNRIs License Agreement is retained in Python 1.6b1, alone or in any derivative version prepared by Licensee.
+	   Alternately, in lieu of CNRIs License Agreement, Licensee may substitute the following text (omitting the quotes): "Python 1.6, beta 1, is made available subject to the terms and conditions in CNRIs License Agreement. This Agreement may be located on the Internet using the following unique, persistent identifier (known as a handle): 1895.22/1011. This Agreement may also be obtained from a proxy server on the Internet using the URL:http://hdl.handle.net/1895.22/1011".
+	   3. In the event Licensee prepares a derivative work that is based on or incorporates Python 1.6b1 or any part thereof, and wants to make the derivative work available to the public as provided herein, then Licensee hereby agrees to indicate in any such work the nature of the modifications made to Python 1.6b1.
+	   4. CNRI is making Python 1.6b1 available to Licensee on an "AS IS" basis. CNRI MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR IMPLIED. BY WAY OF EXAMPLE, BUT NOT LIMITATION, CNRI MAKES NO AND DISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF PYTHON 1.6b1 WILL NOT INFRINGE ANY THIRD PARTY RIGHTS.
+	   5. CNRI SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF THE SOFTWARE FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS A RESULT OF USING, MODIFYING OR DISTRIBUTING PYTHON 1.6b1, OR ANY DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.
+	   6. This License Agreement will automatically terminate upon a material breach of its terms and conditions.
+	   7. This License Agreement shall be governed by and interpreted in all respects by the law of the State of Virginia, excluding conflict of law provisions. Nothing in this License Agreement shall be deemed to create any relationship of agency, partnership, or joint venture between CNRI and Licensee. This License Agreement does not grant permission to use CNRI trademarks or trade name in a trademark sense to endorse or promote products or services of Licensee, or any third party.
+	   8. By clicking on the "ACCEPT" button where indicated, or by copying, installing or otherwise using Python 1.6b1, Licensee agrees to be bound by the terms and conditions of this License Agreement.
+	Copyright (c) 1991 - 1995, Stichting Mathematisch Centrum Amsterdam, The Netherlands. All rights reserved.
+	Permission to use, copy, modify, and distribute this software and its documentation for any purpose and without fee is hereby granted, provided that the above copyright notice appear in all copies and that both that copyright notice and this permission notice appear in supporting documentation, and that the name of Stichting Mathematisch Centrum or CWI not be used in advertising or publicity pertaining to distribution of the software without specific, written prior permission.
+	STICHTING MATHEMATISCH CENTRUM DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO EVENT SHALL STICHTING MATHEMATISCH CENTRUM BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 
 
 #### Relationships
 
-SPDXRef-DOCUMENT DESCRIBES SPDXRef-custom-62410-github.com-p-ickup-ML-2a4b0bd36c46182a38c91b95e1391022bd178f82
-SPDXRef-custom-62410-github.com-p-ickup-ML-2a4b0bd36c46182a38c91b95e1391022bd178f82 DEPENDS_ON SPDXRef-pip-pandas-3.0.3
-SPDXRef-pip-pandas-3.0.3 DEPENDENCY_OF SPDXRef-custom-62410-github.com-p-ickup-ML-2a4b0bd36c46182a38c91b95e1391022bd178f82
-SPDXRef-custom-62410-github.com-p-ickup-ML-2a4b0bd36c46182a38c91b95e1391022bd178f82 DEPENDS_ON SPDXRef-pip-python-dotenv-1.2.2
-SPDXRef-pip-python-dotenv-1.2.2 DEPENDENCY_OF SPDXRef-custom-62410-github.com-p-ickup-ML-2a4b0bd36c46182a38c91b95e1391022bd178f82
-SPDXRef-custom-62410-github.com-p-ickup-ML-2a4b0bd36c46182a38c91b95e1391022bd178f82 DEPENDS_ON SPDXRef-pip-supabase-2.30.0
-SPDXRef-pip-supabase-2.30.0 DEPENDENCY_OF SPDXRef-custom-62410-github.com-p-ickup-ML-2a4b0bd36c46182a38c91b95e1391022bd178f82
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-PSF-LICENSE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-PACKAGING-LICENSE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-util-version-init-.py
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-DATEUTIL-LICENSE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-skiplist.h
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-numpy-datetime-np-datetime.c
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-BOTTLENECK-LICENCE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-portable.h
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-src-datetime-pd-datetime.c
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-parser-io.h
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-src-datetime-date-conversions.c
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-src-parser-io.c
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-AUTHORS.md
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-vendored-numpy-datetime-np-datetime.h
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-numpy-datetime-np-datetime-strings.c
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-vendored-numpy-datetime-np-datetime-strings.h
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-datetime-pd-datetime.h
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-datetime-date-conversions.h
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-lib-ultrajsonenc.c
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-NUMPY-LICENSE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-src-parser-tokenizer.c
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-python-objToJSON.c
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-PYPERCLIP-LICENSE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-vendored-ujson-lib-ultrajson.h
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-python-ujson.c
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-ULTRAJSON-LICENSE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-python-JSONtoObj.c
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-lib-ultrajsondec.c
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-PKG-INFO
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-HAVEN-MIT
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-KLIB-LICENSE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-HAVEN-LICENSE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-MUSL-LICENSE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-PYUPGRADE-LICENSE
-SPDXRef-pip-pandas-3.0.3 CONTAINS SPDXRef-pip-pandas-3.0.3-LICENSES-SAS7BDAT-LICENSE
-SPDXRef-pip-python-dotenv-1.2.2 CONTAINS SPDXRef-pip-python-dotenv-1.2.2-LICENSE
-SPDXRef-pip-python-dotenv-1.2.2 CONTAINS SPDXRef-pip-python-dotenv-1.2.2-docs-license.md
-SPDXRef-pip-supabase-2.30.0 CONTAINS SPDXRef-pip-supabase-2.30.0-LICENSE
-
-
-
-#### Files
-
-FileName: LICENSES/PSF_LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-PSF-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: (0BSD OR Python-2.0)
-LicenseInfoInFile: 0BSD
-LicenseInfoInFile: Python-2.0
-FileChecksum: MD5: 5bc59eae24c6bfe180d414431177c2d4
-FileChecksum: SHA1: 2f14c86edabe9e3907a63edb2ab965cab4d9299b
-FileChecksum: SHA256: 64dd6b410e3cf684eff799a49dad922aa2d3e5c52c150eed07e8f70ecd7c15fc
-
-
-FileName: LICENSES/PACKAGING_LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-PACKAGING-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: (Apache-2.0 OR BSD-2-Clause)
-LicenseInfoInFile: Apache-2.0
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: bf545268ab1c628eac8829014fc47e17
-FileChecksum: SHA1: f9532efa9f383f9b9ada7e54737650796caecb56
-FileChecksum: SHA256: 451ee2acc44d8fb15c32407e72f55c899fc7ba9d02c753e6b6302708db7e0e59
-
-
-FileName: pandas/util/version/__init__.py
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-util-version-init-.py
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: (Apache-2.0 OR BSD-3-Clause)
-LicenseInfoInFile: Apache-2.0
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: cf2f49e9e6abc599f55cc2d2858b5ae1
-FileChecksum: SHA1: 9eea8604533653bf7c90f1aaee140a78af150c8d
-FileChecksum: SHA256: 26c6bc5e4b70d933d00e3265142a2377b519cae0bd646bf1f5032712d4504aa9
-
-
-FileName: LICENSES/DATEUTIL_LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-DATEUTIL-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: (Apache-2.0 OR BSD-3-Clause)
-LicenseInfoInFile: Apache-2.0
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: cf2f49e9e6abc599f55cc2d2858b5ae1
-FileChecksum: SHA1: 9eea8604533653bf7c90f1aaee140a78af150c8d
-FileChecksum: SHA256: 26c6bc5e4b70d933d00e3265142a2377b519cae0bd646bf1f5032712d4504aa9
-
-
-FileName: pandas/_libs/include/pandas/skiplist.h
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-skiplist.h
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: pandas/_libs/src/vendored/numpy/datetime/np_datetime.c
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-numpy-datetime-np-datetime.c
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: LICENSES/BOTTLENECK_LICENCE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-BOTTLENECK-LICENCE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: pandas/_libs/include/pandas/portable.h
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-portable.h
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: pandas/_libs/src/datetime/pd_datetime.c
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-datetime-pd-datetime.c
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: pandas/_libs/include/pandas/parser/io.h
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-parser-io.h
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: pandas/_libs/src/datetime/date_conversions.c
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-datetime-date-conversions.c
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: pandas/_libs/src/parser/io.c
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-parser-io.c
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: AUTHORS.md
-SPDXID: SPDXRef-pip-pandas-3.0.3-AUTHORS.md
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: pandas/_libs/include/pandas/vendored/numpy/datetime/np_datetime.h
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-vendored-numpy-datetime-np-datetime.h
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: pandas/_libs/src/vendored/numpy/datetime/np_datetime_strings.c
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-numpy-datetime-np-datetime-strings.c
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: pandas/_libs/include/pandas/vendored/numpy/datetime/np_datetime_strings.h
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-vendored-numpy-datetime-np-datetime-strings.h
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: pandas/_libs/include/pandas/datetime/pd_datetime.h
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-datetime-pd-datetime.h
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: pandas/_libs/include/pandas/datetime/date_conversions.h
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-datetime-date-conversions.h
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-2-Clause
-LicenseInfoInFile: BSD-2-Clause
-FileChecksum: MD5: 38d9b3909e80221955d3e3588f30add5
-FileChecksum: SHA1: 0216db4ce6f2ea64dc7b8fe10f1a6c5c52bb7bd7
-FileChecksum: SHA256: 248dd895a2f89e28813b4c8c0a7d21806a35699102e4f6e32f47784b82730428
-
-
-FileName: LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e98642e1210ade884e5254ab18d55b7d
-FileChecksum: SHA1: 0e3c177f2dc66c52d8d5626e31eda8d6fe747613
-FileChecksum: SHA256: 9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae
-
-
-FileName: pandas/_libs/src/vendored/ujson/lib/ultrajsonenc.c
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-lib-ultrajsonenc.c
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e98642e1210ade884e5254ab18d55b7d
-FileChecksum: SHA1: 0e3c177f2dc66c52d8d5626e31eda8d6fe747613
-FileChecksum: SHA256: 9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae
-
-
-FileName: LICENSES/NUMPY_LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-NUMPY-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e98642e1210ade884e5254ab18d55b7d
-FileChecksum: SHA1: 0e3c177f2dc66c52d8d5626e31eda8d6fe747613
-FileChecksum: SHA256: 9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae
-
-
-FileName: pandas/_libs/src/parser/tokenizer.c
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-parser-tokenizer.c
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e98642e1210ade884e5254ab18d55b7d
-FileChecksum: SHA1: 0e3c177f2dc66c52d8d5626e31eda8d6fe747613
-FileChecksum: SHA256: 9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae
-
-
-FileName: pandas/_libs/src/vendored/ujson/python/objToJSON.c
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-python-objToJSON.c
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e98642e1210ade884e5254ab18d55b7d
-FileChecksum: SHA1: 0e3c177f2dc66c52d8d5626e31eda8d6fe747613
-FileChecksum: SHA256: 9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae
-
-
-FileName: LICENSES/PYPERCLIP_LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-PYPERCLIP-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e98642e1210ade884e5254ab18d55b7d
-FileChecksum: SHA1: 0e3c177f2dc66c52d8d5626e31eda8d6fe747613
-FileChecksum: SHA256: 9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae
-
-
-FileName: pandas/_libs/include/pandas/vendored/ujson/lib/ultrajson.h
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-include-pandas-vendored-ujson-lib-ultrajson.h
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e98642e1210ade884e5254ab18d55b7d
-FileChecksum: SHA1: 0e3c177f2dc66c52d8d5626e31eda8d6fe747613
-FileChecksum: SHA256: 9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae
-
-
-FileName: pandas/_libs/src/vendored/ujson/python/ujson.c
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-python-ujson.c
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e98642e1210ade884e5254ab18d55b7d
-FileChecksum: SHA1: 0e3c177f2dc66c52d8d5626e31eda8d6fe747613
-FileChecksum: SHA256: 9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae
-
-
-FileName: LICENSES/ULTRAJSON_LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-ULTRAJSON-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: (BSD-3-Clause OR TCL)
-LicenseInfoInFile: BSD-3-Clause
-LicenseInfoInFile: TCL
-FileChecksum: MD5: 4b3a46f079127b9ed6ffb8c5607eec84
-FileChecksum: SHA1: 660813479c835e9df2fb0069b0a1ea9a4f7e9c20
-FileChecksum: SHA256: 566c5384b903c44e9d40b50b7be2dd66a66389b04e9f66047115827269b7d581
-
-
-FileName: pandas/_libs/src/vendored/ujson/python/JSONtoObj.c
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-python-JSONtoObj.c
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e98642e1210ade884e5254ab18d55b7d
-FileChecksum: SHA1: 0e3c177f2dc66c52d8d5626e31eda8d6fe747613
-FileChecksum: SHA256: 9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae
-
-
-FileName: pandas/_libs/src/vendored/ujson/lib/ultrajsondec.c
-SPDXID: SPDXRef-pip-pandas-3.0.3-pandas-libs-src-vendored-ujson-lib-ultrajsondec.c
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e98642e1210ade884e5254ab18d55b7d
-FileChecksum: SHA1: 0e3c177f2dc66c52d8d5626e31eda8d6fe747613
-FileChecksum: SHA256: 9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae
-
-
-FileName: PKG-INFO
-SPDXID: SPDXRef-pip-pandas-3.0.3-PKG-INFO
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e98642e1210ade884e5254ab18d55b7d
-FileChecksum: SHA1: 0e3c177f2dc66c52d8d5626e31eda8d6fe747613
-FileChecksum: SHA256: 9850f6b5bdef7346503065807b878deb8058b976c5c329f4c4d23bf4796ce9ae
-
-
-FileName: LICENSES/HAVEN_MIT
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-HAVEN-MIT
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: MIT
-LicenseInfoInFile: MIT
-FileChecksum: MD5: 7abc1a233092fc104c7af72a89c0829c
-FileChecksum: SHA1: 89690ac571dcf4c9c40c842efed3f11171d07b29
-FileChecksum: SHA256: e5dcffe836b6ec8a58e492419b550e65fb8cbdc308503979e5dacb33ac7ea3b7
-
-
-FileName: LICENSES/KLIB_LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-KLIB-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: MIT
-LicenseInfoInFile: MIT
-FileChecksum: MD5: 7abc1a233092fc104c7af72a89c0829c
-FileChecksum: SHA1: 89690ac571dcf4c9c40c842efed3f11171d07b29
-FileChecksum: SHA256: e5dcffe836b6ec8a58e492419b550e65fb8cbdc308503979e5dacb33ac7ea3b7
-
-
-FileName: LICENSES/HAVEN_LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-HAVEN-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: MIT
-LicenseInfoInFile: MIT
-FileChecksum: MD5: 7abc1a233092fc104c7af72a89c0829c
-FileChecksum: SHA1: 89690ac571dcf4c9c40c842efed3f11171d07b29
-FileChecksum: SHA256: e5dcffe836b6ec8a58e492419b550e65fb8cbdc308503979e5dacb33ac7ea3b7
-
-
-FileName: LICENSES/MUSL_LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-MUSL-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: MIT
-LicenseInfoInFile: MIT
-FileChecksum: MD5: 7abc1a233092fc104c7af72a89c0829c
-FileChecksum: SHA1: 89690ac571dcf4c9c40c842efed3f11171d07b29
-FileChecksum: SHA256: e5dcffe836b6ec8a58e492419b550e65fb8cbdc308503979e5dacb33ac7ea3b7
-
-
-FileName: LICENSES/PYUPGRADE_LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-PYUPGRADE-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: MIT
-LicenseInfoInFile: MIT
-FileChecksum: MD5: 7abc1a233092fc104c7af72a89c0829c
-FileChecksum: SHA1: 89690ac571dcf4c9c40c842efed3f11171d07b29
-FileChecksum: SHA256: e5dcffe836b6ec8a58e492419b550e65fb8cbdc308503979e5dacb33ac7ea3b7
-
-
-FileName: LICENSES/SAS7BDAT_LICENSE
-SPDXID: SPDXRef-pip-pandas-3.0.3-LICENSES-SAS7BDAT-LICENSE
-Comment: extracted from SPDXRef-pip-pandas-3.0.3
-LicenseConcluded: MIT
-LicenseInfoInFile: MIT
-FileChecksum: MD5: 7abc1a233092fc104c7af72a89c0829c
-FileChecksum: SHA1: 89690ac571dcf4c9c40c842efed3f11171d07b29
-FileChecksum: SHA256: e5dcffe836b6ec8a58e492419b550e65fb8cbdc308503979e5dacb33ac7ea3b7
-
-
-FileName: LICENSE
-SPDXID: SPDXRef-pip-python-dotenv-1.2.2-LICENSE
-Comment: extracted from SPDXRef-pip-python-dotenv-1.2.2
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e914cdb773ae44a732b392532d88f072
-FileChecksum: SHA1: 62e514b16a2f4c2130d53cc3c894810ff8a77e6c
-FileChecksum: SHA256: 80619b7049f08c81683ad0e01f08f257a840652dd71ee83146d36658c7d2c2b9
-
-
-FileName: docs/license.md
-SPDXID: SPDXRef-pip-python-dotenv-1.2.2-docs-license.md
-Comment: extracted from SPDXRef-pip-python-dotenv-1.2.2
-LicenseConcluded: BSD-3-Clause
-LicenseInfoInFile: BSD-3-Clause
-FileChecksum: MD5: e914cdb773ae44a732b392532d88f072
-FileChecksum: SHA1: 62e514b16a2f4c2130d53cc3c894810ff8a77e6c
-FileChecksum: SHA256: 80619b7049f08c81683ad0e01f08f257a840652dd71ee83146d36658c7d2c2b9
-
-
-FileName: LICENSE
-SPDXID: SPDXRef-pip-supabase-2.30.0-LICENSE
-Comment: extracted from SPDXRef-pip-supabase-2.30.0
-LicenseConcluded: MIT
-LicenseInfoInFile: MIT
-FileChecksum: MD5: bb0a4b2e3d82de4116e8425de9a3927f
-FileChecksum: SHA1: aa6b36ec3143500d5e718a69c5edcc8e57e40d6b
-FileChecksum: SHA256: 334dd6820e2eaeab2064e7c59001b810566728a28a41a7c1dbf69bbee17d0936
-
-
-
-<!--FOSSA: Do not touch content below. -->
-
-<!--FOSSA: ==depsig=fb63aa3e270fbb9c9e78c6850d37120615fab735c3680cbe122e5eedaac971ec== -->
-
-
+SPDXRef-DOCUMENT DESCRIBES SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7
+SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7 DEPENDS_ON SPDXRef-pip-pandas-3.0.3
+SPDXRef-pip-pandas-3.0.3 DEPENDENCY_OF SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7
+SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7 DEPENDS_ON SPDXRef-pip-pip-audit-2.10.1
+SPDXRef-pip-pip-audit-2.10.1 DEPENDENCY_OF SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7
+SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7 DEPENDS_ON SPDXRef-pip-python-dotenv-1.2.2
+SPDXRef-pip-python-dotenv-1.2.2 DEPENDENCY_OF SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7
+SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7 DEPENDS_ON SPDXRef-pip-ruff-0.15.17
+SPDXRef-pip-ruff-0.15.17 DEPENDENCY_OF SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7
+SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7 DEPENDS_ON SPDXRef-pip-supabase-2.31.0
+SPDXRef-pip-supabase-2.31.0 DEPENDENCY_OF SPDXRef-custom-62410-github.com-p-ickup-ML-5a48091a9ac46122482fc8372d502fc93e1ad1a7
