@@ -35,6 +35,7 @@ class TestNormalizeAirport(unittest.TestCase):
 
 class TestNormalizeMatchingStatus(unittest.TestCase):
     def test_known_statuses(self):
+        self.assertEqual(normalize_matching_status(" submitted "), "submitted")
         self.assertEqual(normalize_matching_status("matched"), "matched")
         self.assertEqual(normalize_matching_status(" unmatched "), "unmatched")
 

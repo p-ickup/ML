@@ -20,6 +20,24 @@ python3 main.py --dry-run --days-ahead 20 --vouchers ../vouchers/Summer.csv
 
 Review `../matches/matches_dryrun.csv` before running without `--dry-run`.
 
+## Before production: import vouchers
+
+Production runs assign vouchers from `public."Vouchers"`, not directly from a CSV.
+Validate and import the applicable voucher CSV from the repository root before
+running ML in production:
+
+```bash
+# Validate only; no database writes
+python3 Algorithm/import_vouchers.py vouchers/Summer.csv
+
+# Insert missing vouchers into Supabase
+python3 Algorithm/import_vouchers.py vouchers/Summer.csv --commit
+```
+
+The import is safe to rerun: existing voucher links and their usage state are
+left unchanged. Confirm the table has enough available vouchers for the run,
+then execute the production command without `--vouchers`.
+
 Run tests (stdlib `unittest`, no extra deps) from the repo root:
 
 ```bash
@@ -32,6 +50,13 @@ Run lint checks from the repo root:
 python3 -m ruff check .
 ```
 
+Run dependency checks:
+
+```bash
+python3 -m pip check
+python3 -m pip_audit -r requirements.txt --progress-spinner off
+```
+
 Run live Supabase integration tests from the repo root:
 
 ```bash
@@ -40,7 +65,8 @@ python3 -m unittest tests.integration_supabase
 
 This command touches the configured Supabase database and covers voucher import,
 `AlgorithmStatus`, production commit side effects, rollback, and selected
-`main.run(...)` success and failure lifecycle scenarios.
+`main.run(...)` success and failure lifecycle scenarios. Its reusable ten-flight
+scenario parks dedicated test forms after deleting generated matches and rides.
 
 ---
 
@@ -69,7 +95,7 @@ Run from **`Algorithm/`**:
 # Dry-run (review only)
 python3 main.py --dry-run --days-ahead 20 --vouchers ../vouchers/Summer.csv
 
-# Production
+# Production (after importing vouchers into Supabase)
 python3 main.py --days-ahead 20
 ```
 
@@ -78,7 +104,7 @@ python3 main.py --days-ahead 20
 | `--dry-run` | No DB writes; voucher `.dryrun` copy |
 | `--days-ahead N` | Include flights through today + N days |
 | `--days-ahead-start N` | Start of window (use `0` to include today) |
-| `--vouchers PATH` | Dry-run voucher CSV |
+| `--vouchers PATH` | Dry-run voucher CSV only; production uses `public."Vouchers"` |
 | `--csv PATH` | Dry-run output CSV path |
 
 Details: [Operations](documentation/operations.md).

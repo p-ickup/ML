@@ -59,7 +59,7 @@ coverage lives in `tests/integration_supabase_pipeline.py`.
 
 **Role:** Single policy file for matching, Connect, and covered dates.
 
-**Key settings:** bag limits, `MAX_GROUP_SIZE`, terminal mode, overlap grace, `CONNECT_*`, `COMPATIBLE_SCHOOLS`, `COVERED_DATES_*`.
+**Key settings:** bag limits, `MAX_GROUP_SIZE`, terminal mode, overlap grace, `CONNECT_*`, `COMPATIBLE_SCHOOLS`, `SUBSIDY_MIN_GROUP_SIZE`, `COVERED_DATES_*`.
 
 **Start here when:** ops asks to change limits, airports, Connect tiers, or covered break dates — **before** editing matcher code.
 
@@ -226,6 +226,11 @@ From `requirements.txt`:
 | `pandas` | Voucher CSV handling |
 | `python-dotenv` | `.env` loading in `main.py` |
 | `supabase` | Supabase database client |
+| `ruff` | CI and local lint checks |
+| `pip-audit` | Known-vulnerability checks for Python dependencies |
+
+Direct dependency versions are pinned in `requirements.txt` so local and CI
+installs use the same tested releases.
 
 ---
 

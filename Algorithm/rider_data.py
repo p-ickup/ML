@@ -41,7 +41,7 @@ def normalize_airport(raw: Optional[str]) -> str:
 
 def normalize_matching_status(raw: Optional[str]) -> str:
     status = str(raw or "").strip().lower()
-    if status in {"matched", "unmatched"}:
+    if status in {"submitted", "matched", "unmatched"}:
         return status
     return "submitted"
 

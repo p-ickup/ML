@@ -1,7 +1,8 @@
 # Runtime dependencies
-pandas
-python-dotenv
-supabase
+pandas==3.0.3
+python-dotenv==1.2.2
+supabase==2.31.0
 
 # Local checks
-ruff
+ruff==0.15.17
+pip-audit==2.10.1

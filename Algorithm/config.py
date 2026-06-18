@@ -39,10 +39,16 @@ COMPATIBLE_SCHOOLS = {
 }
 
 # SUBSIDY & VOUCHERS
+# Minimum matched group size required for subsidy eligibility by airport.
+SUBSIDY_MIN_GROUP_SIZE = {
+    "LAX": 3,
+    "ONT": 2,
+}
+
 # Which ride dates get Pomona subsidy and voucher assignment (MM-DD, any year).
 COVERED_DATES_EXPLICIT = True   # True = only dates in the lists below are subsidized/voucher-eligible
 COVERED_DATES_OUTBOUND = [       # school → airport (to_airport=True)
-    "05-12", "05-13", "05-14", "05-15", "05-16", "05-17", "05-18", "05-19",
+    "05-12", "05-13", "05-14", "05-15", "05-16", "05-17", "05-18", "05-19","10-09", "10-10", "10-11"
 ]
 COVERED_DATES_INBOUND = [        # airport → school (to_airport=False)
     "03-20", "03-21", "03-22","06-29", "06-30", "07-01"

@@ -238,7 +238,12 @@ def _final_lax_unmatched_retry(
     return all_matches + new_matches, all_unmatched_new
 
 
-def apply_group_subsidy(matches: list[Match], thresholds: Dict[str, int]) -> None:
+def apply_group_subsidy(
+    matches: list[Match],
+    thresholds: Optional[Dict[str, int]] = None,
+) -> None:
+    if thresholds is None:
+        thresholds = config.SUBSIDY_MIN_GROUP_SIZE
 
     # First, reset ALL riders to False to ensure clean state
     # Also track which riders appear in which matches
@@ -411,10 +416,7 @@ def run(
 
         # Subsidy once the final group list is known (ONT splits, LAX retry, Connect merge).
         # Production voucher assignment is committed transactionally by the DB RPC.
-        apply_group_subsidy(
-            all_matches,
-            thresholds={"LAX": 3, "ONT": 2}
-        )
+        apply_group_subsidy(all_matches)
         if dry_run:
             assign_vouchers(
                 all_matches,

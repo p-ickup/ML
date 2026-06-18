@@ -4,7 +4,7 @@ How to install, run, verify, and troubleshoot the matching pipeline.
 
 ## Prerequisites
 
-- Python 3.9+ (3.11+ recommended; repo tested on 3.13)
+- Python 3.11+ (CI and local verification use Python 3.13)
 - Supabase credentials with service-role access for the transactional commit RPC
 - Applied SQL from `documentation/sql/001_commit_matching_run.sql`
 - Applied integrity safeguards from `documentation/sql/002_integrity_safeguards.sql` after diagnostics are clean
@@ -140,7 +140,8 @@ Edit `Algorithm/config.py` (typical ops tasks):
 | `CONNECT_SIZE1` / `CONNECT_SIZE2` | Connect tier sizes |
 | `COMPATIBLE_SCHOOLS` | Who matches together |
 
-Subsidy **size** thresholds (`LAX: 3`, `ONT: 2`) are in `main.py` → `apply_group_subsidy`, not `config.py`.
+Subsidy **size** thresholds (`LAX: 3`, `ONT: 2`) are configured through
+`SUBSIDY_MIN_GROUP_SIZE` in `config.py`.
 
 After config changes, always re dry-run.
 
@@ -216,10 +217,10 @@ It keeps the command below stable while loading focused tests from
 `tests/integration_supabase_pipeline.py`. Shared live DB setup and cleanup live
 in `tests/integration_supabase_base.py`.
 
-The suite uses `vouchers/TestImport.csv` and temporary
-auth/users/flights/vouchers/rides/matches rows to verify the production write
-path, `AlgorithmStatus`, rollback behavior, and selected `main.run(...)`
-production lifecycle success and failure scenarios.
+The suite uses the tracked, non-production `tests/fixtures/TestVouchers.csv`
+and controlled Supabase fixtures to verify the production write path,
+`AlgorithmStatus`, rollback behavior, and selected `main.run(...)` production
+lifecycle success and failure scenarios.
 
 ```bash
 python3 -m unittest tests.integration_supabase
@@ -227,8 +228,10 @@ python3 -m unittest tests.integration_supabase
 
 This suite does not skip. It fails clearly if `.env` is missing Supabase
 credentials, the service key cannot create temporary auth users, or the required
-RPC/schema changes have not been applied. Successful runs clean up the rows they
-created.
+RPC/schema changes have not been applied. Successful runs delete generated
+matching artifacts. One ten-flight end-to-end scenario retains dedicated test
+users and flights, parks those flights on `2000-01-01`, and reuses them on later
+runs instead of recreating forms.
 
 ---
 
@@ -246,6 +249,16 @@ Run lint checks from the **repository root**:
 ```bash
 python3 -m ruff check .
 ```
+
+Run dependency compatibility and vulnerability checks:
+
+```bash
+python3 -m pip check
+python3 -m pip_audit -r requirements.txt --progress-spinner off
+```
+
+CI also compiles all production and test modules and runs the local SQL RPC
+contract tests as part of normal unit-test discovery.
 
 Verbose, or a single module/case:
 
@@ -276,7 +289,7 @@ python3 -m unittest tests.integration_supabase
 
 | Test module | Live DB behavior covered |
 |-------------|--------------------------|
-| `tests.integration_supabase` | `TestImport.csv` import into `Vouchers`; direct `AlgorithmStatus` create/reuse/success/failure updates; `main.run(...)` success, no-rider, no-match, Connect no-merge, Connect merge, pre-commit failure, and commit-time failure scenarios; `commit_matching_run` ride/match insert; flight matched/unmatched updates; voucher consumption/audit fields; idempotent replay; rollback on mid-commit failure; Connect cleanup deleting old matches/rides |
+| `tests.integration_supabase` | Tracked `TestVouchers.csv` fixture import into `Vouchers`; direct `AlgorithmStatus` create/reuse/success/failure updates; `main.run(...)` success, no-rider, no-match, Connect no-merge, Connect merge, pre-commit failure, and commit-time failure scenarios; reusable ten-flight Connect/ONT/unmatched flow; `commit_matching_run` ride/match insert; flight matched/unmatched updates; voucher consumption/audit fields; idempotent replay; rollback on mid-commit failure; Connect cleanup deleting old matches/rides |
 
 `tests/helpers.py` adds `Algorithm/` to the path, builds `RiderLite` fixtures,
 and provides a `patch_config(...)` context manager for temporary config

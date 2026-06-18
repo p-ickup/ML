@@ -131,11 +131,11 @@ python3 -m py_compile Algorithm/*.py tests/integration_supabase*.py
 
 - `python3 -m unittest discover -s tests -t .`
   - Result: passed
-  - Tests run: 78
+  - Tests run: 90
   - Skipped: 0
 - `python3 -m unittest tests.integration_supabase`
   - Result: passed
-  - Tests run: 18
+  - Tests in current suite: 19
   - Verified live DB voucher import, transactional commit success, `Rides` inserts, `Matches` inserts, `Flights` matched/unmatched updates, voucher consumption/audit fields, `MatchingRuns` ledger updates, idempotent replay, rollback on mid-commit DB failure, Connect cleanup, direct `AlgorithmStatus` behavior, `main.run(...)` lifecycle success/failure scenarios, and persisted cross-midnight `Matches` windows.
 - `python3 Algorithm/import_vouchers.py vouchers/SpringBreak.csv`
   - Result: passed
@@ -145,7 +145,7 @@ python3 -m py_compile Algorithm/*.py tests/integration_supabase*.py
 
 **Notes for ASPC review:**
 
-- The live Supabase integration tests intentionally touch the configured Supabase database and clean up the rows they create.
+- The live Supabase integration tests intentionally touch the configured Supabase database. Generated matching artifacts are removed; the reusable ten-flight scenario parks its dedicated forms for later runs.
 - [documentation/sql/002_integrity_safeguards.sql](/Users/xmora/Documents/Pickup/ML/documentation/sql/002_integrity_safeguards.sql) includes diagnostic SELECTs that should be run before applying the constraint/index section. The constraint/index section should only be applied after diagnostics return no rows.
 
 ## Remediation Issue #2
@@ -162,7 +162,7 @@ cleanup operations, AlgorithmStatus behavior, and rollback scenarios.
 
 **Summary:**
 
-Live Supabase integration coverage has been added for the exact side effects named in the remediation: production database writes, Connect cleanup operations, `AlgorithmStatus` behavior, and rollback scenarios. The suite uses controlled pipeline inputs where needed for determinism, but the production side effects are real Supabase operations against temporary `Vouchers`, `AlgorithmStatus`, `Rides`, `Matches`, `Flights`, and `MatchingRuns` rows. It verifies both successful production paths and expected failure paths, including failures before commit and during the transactional RPC commit.
+Live Supabase integration coverage has been added for the exact side effects named in the remediation: production database writes, Connect cleanup operations, `AlgorithmStatus` behavior, and rollback scenarios. The suite performs real Supabase operations with controlled inputs and verifies successful production paths plus failures before and during the transactional commit.
 
 **Remediation completed:**
 
@@ -170,13 +170,16 @@ Live Supabase integration coverage has been added for the exact side effects nam
 - `tests/integration_supabase_base.py` provides the shared Supabase client, temporary row fixtures, and cleanup helpers.
 - `tests/integration_supabase_commit.py` covers voucher import and direct `commit_matching_run` RPC side effects.
 - `tests/integration_supabase_pipeline.py` covers direct `AlgorithmStatus` behavior and `main.run(...)` lifecycle side effects.
-- The integration suite uses the configured Supabase database and cleans up its test rows.
-- The suite verifies `TestImport.csv` import into `public."Vouchers"`.
+- The integration suite removes generated database artifacts; one reusable scenario retains ten dedicated flight fixtures parked on a past date.
+- The suite verifies the tracked, non-production `tests/fixtures/TestVouchers.csv` fixture imports into `public."Vouchers"`.
+- Because the voucher fixture is tracked outside the ignored operational `vouchers/` directory, the integration suite has the same input after a clean checkout.
 - The suite verifies `commit_matching_run` inserts `Rides`, inserts `Matches`, updates matched and unmatched `Flights`, consumes vouchers, writes `MatchingRuns`, supports idempotent replay, rolls back on mid-commit failure, and performs Connect cleanup.
 - The suite verifies direct `AlgorithmStatus` behavior: creating a running row, reusing a due scheduled row, marking success, and marking failure with an error message.
 - The suite verifies `main.run(...)` production behavior for a normal match run, no candidate riders, one rider with no match, Connect enabled without cleanup, Connect merge replacing an existing match/ride, failure before commit, failure during commit, and persisted `Matches` windows for broad, tight, and three-person cross-midnight groups.
+- A ten-flight production-path test verifies seven overlapping LAX forms become one Connect ride, two ONT forms become a separate ride, and one non-overlapping form remains unmatched. It deletes generated matches/rides and reuses the parked forms on later runs.
 - Failure tests verify `AlgorithmStatus.failed`, `error_message`, absence of unexpected production side effects, and RPC rollback of partial ride/match writes.
 - Unit coverage verifies commit payload validation, retry behavior, voucher CSV parsing/import mapping, matching logic, Connect policy, bucket behavior, and dry-run voucher assignment.
+- Connect regression coverage verifies normal matches survive when no Connect group forms and existing DB rides are not resubmitted as new matches.
 
 **AlgorithmStatus table details used for testing:**
 
@@ -194,13 +197,11 @@ python3 -m unittest tests.integration_supabase
 
 **Verification completed:**
 
-- `python3 -m unittest tests.integration_supabase`
-  - Result: passed
-  - Tests run: 18
-  - Current DB coverage: voucher import, direct `AlgorithmStatus` behavior, `main.run(...)` production lifecycle success/no-rider/no-match/Connect/failure scenarios, transactional commit success, idempotent replay, rollback on DB failure, Connect cleanup, and persisted cross-midnight `Matches` windows.
+- Current live DB suite: 19 tests. The original 18-test suite passed, and the new reusable ten-flight scenario passed on both initial creation and fixture reuse.
+- Current DB coverage: voucher import, direct `AlgorithmStatus` behavior, `main.run(...)` lifecycle success/no-rider/no-match/Connect/failure scenarios, transactional commit success, idempotent replay, rollback, Connect cleanup, persisted cross-midnight windows, and the ten-flight Connect/ONT/unmatched scenario.
 - `python3 -m unittest discover -s tests -t .`
   - Result: passed
-  - Tests run: 78
+  - Tests run: 90
 
 **Supporting documentation updated:**
 
@@ -225,8 +226,8 @@ python3 -m unittest tests.integration_supabase
 
 **Test results:**
 - `python3 -m unittest tests.test_time_windows tests.test_rule_matching tests.test_commit_payload tests.test_main_csv` - 34 targeted cross-midnight unit tests passed.
-- `python3 -m unittest tests.integration_supabase` - 18 tests passed.
-- `python3 -m unittest discover -s tests -t .` - 78 tests passed.
+- `python3 -m unittest tests.integration_supabase` - current suite contains 19 live tests.
+- `python3 -m unittest discover -s tests -t .` - 90 tests passed.
 
 **Repository updates:**
 - `Algorithm/time_windows.py`
@@ -238,40 +239,29 @@ python3 -m unittest tests.integration_supabase
 - `tests/test_main_csv.py`
 - `tests/integration_supabase_pipeline.py`
 
-## Remediation Issue #4
-
-**Audit item:** Matched Flight Data Can Become Inconsistent
-
-**Status:** Not started
-
-**Remediation completed:** None yet.
-
-**Supporting documentation:** None yet.
-
-**Test results:** None yet.
-
-**Repository updates:** None yet.
-
 ## Remediation Issue #5
 
 **Audit item:** Matching Lifecycle Has Gaps
 
-**Status:** Partially completed for ML-owned matching lifecycle
+**Status:** Completed for ML-owned matching lifecycle
 
-**Summary:** The ML repo now uses explicit `Flights.matching_status` values instead of the old `matched` null/false/true lifecycle. ML reads skip only `matching_status = 'matched'`, treats missing or unknown values defensively as `submitted`, and the transactional commit RPC writes `matched` or `unmatched` status values during production commits.
+**Summary:** The ML repo now uses the intended three-state matching lifecycle: `submitted`, `matched`, and `unmatched`. New or unknown values normalize to `submitted`, ML skips only `matched` flights, and production commits explicitly write `matched` or `unmatched`.
 
 **Remediation completed:**
 - Replaced ML reads of `Flights.matched` with `Flights.matching_status`.
+- Explicitly recognizes `submitted`, `matched`, and `unmatched`; missing or unknown values safely normalize to `submitted`.
 - Updated `RiderLite` and Connect merge rebuilding to carry `matching_status`.
 - Updated the commit RPC so matched flights are written as `matching_status = 'matched'` and still-unmatched flights as `matching_status = 'unmatched'`.
 - Updated integration tests and docs to verify the new status field.
 
 **Supporting documentation:** Schema, operations, glossary, code guide, and SQL RPC documentation now reference `matching_status`.
 
+**Note:** LAX and ONT subsidy minimum group sizes are configurable through `SUBSIDY_MIN_GROUP_SIZE` in `Algorithm/config.py`.
+
 **Test results:**
-- `python3 -m unittest discover -s tests -t .` - 80 local tests passed.
+- `python3 -m unittest discover -s tests -t .` - 90 local tests passed.
 - `python3 -m ruff check .` - passed.
-- `python3 -m unittest tests.integration_supabase` - 18 live Supabase tests passed.
+- `python3 -m unittest tests.integration_supabase` - 19 live Supabase tests passed.
 
 **Repository updates:**
 - `Algorithm/rider_data.py`
@@ -280,6 +270,7 @@ python3 -m unittest tests.integration_supabase
 - `tests/integration_supabase_base.py`
 - `tests/integration_supabase_commit.py`
 - `tests/integration_supabase_pipeline.py`
+- `tests/fixtures/TestVouchers.csv`
 
 ## Remediation Issue #11
 
@@ -287,22 +278,31 @@ python3 -m unittest tests.integration_supabase
 
 **Status:** Completed for ML-equivalent scope
 
-**Summary:** Although issue #11 was in reference to frontend release assurance, the ML repo now has a lightweight CI gate appropriate for this Python batch pipeline. Pull requests and pushes to `main` or `remediation` install dependencies, run Ruff, and run the local unit test suite. Build and TypeScript checks are not applicable to this Python-only repository.
+**Summary:** Although issue #11 was in reference to frontend release assurance, the ML repo now has CI gates appropriate for this Python batch pipeline. Pull requests and pushes to `main` or `remediation` install pinned dependencies, verify dependency compatibility and known vulnerabilities, compile the Python sources, check the SQL RPC contract, run Ruff, and run the unit suite. Frontend builds, API authorization, and deadline enforcement are outside this repository's scope.
 
 **Remediation completed:**
 - Added a GitHub Actions workflow for the ML repo.
-- CI installs `requirements.txt`.
+- CI installs pinned, tested direct dependencies from `requirements.txt`.
+- CI runs `pip check` and `pip-audit` so incompatible or known-vulnerable dependency sets fail the workflow.
+- CI compiles production and test modules before linting.
+- Added a local schema/RPC contract test for the transactional function signature, service-role permission, write set, and matching-status updates.
 - CI runs `python -m ruff check .`.
 - CI runs `python -m unittest discover -s tests -t .`.
 
-**Supporting documentation:** The workflow itself documents the enforced ML checks.
+**Supporting documentation:** The workflow and operations guide document the enforced ML checks. The live Supabase suite remains an explicit credentialed test because pull-request CI does not receive production service-role credentials.
 
 **Test results:**
 - `python3 -m ruff check .` - passed locally.
-- `python3 -m unittest discover -s tests -t .` - 78 local tests passed.
+- `python3 -m unittest discover -s tests -t .` - 90 local tests passed.
+- Clean-environment dependency installation and `pip check` passed.
+- `pip-audit` reported no known vulnerabilities in the pinned requirements.
+- Python source compilation and the SQL RPC contract checks passed.
+- The reusable ten-flight live Supabase test passed with the pinned dependencies.
 
 **Repository updates:**
 - `.github/workflows/ci.yml`
+- `tests/test_sql_contract.py`
+- `requirements.txt`
 
 ## Remediation Issue #12
 
@@ -321,9 +321,9 @@ python3 -m unittest tests.integration_supabase
 **Supporting documentation:** README, operations, and code guide now document the current batch pipeline and Ruff lint command.
 
 **Test results:**
-- Dependency import verification passed for `pandas`, `python-dotenv`, `supabase`, and `ruff`.
+- Dependency import verification passed for pinned `pandas`, `python-dotenv`, `supabase`, and `ruff`.
 - `python3 -m unittest tests.test_rule_matching tests.test_audit tests.test_main_csv` - 30 targeted tests passed.
-- `python3 -m unittest discover -s tests -t .` - 78 local tests passed.
+- `python3 -m unittest discover -s tests -t .` - 90 local tests passed.
 - `python3 -m ruff check .` - passed.
 
 **Repository updates:**

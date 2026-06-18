@@ -1,0 +1,6 @@
+Date (start),Date (end),Contingency,voucher_link,TO_AIRPORT,AIRPORT,USED,start_date,end_date
+March 22,March 22,True,https://voucher-test.invalid/TEST-VOUCHER-001,False,LAX,False,2026-03-22,2026-03-22
+March 22,March 22,True,https://voucher-test.invalid/TEST-VOUCHER-002,False,LAX,False,2026-03-22,2026-03-22
+March 22,March 22,True,https://voucher-test.invalid/TEST-VOUCHER-003,False,LAX,False,2026-03-22,2026-03-22
+March 22,March 22,True,https://voucher-test.invalid/TEST-VOUCHER-004,False,LAX,False,2026-03-22,2026-03-22
+March 22,March 22,True,https://voucher-test.invalid/TEST-VOUCHER-005,False,LAX,False,2026-03-22,2026-03-22
