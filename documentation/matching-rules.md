@@ -137,6 +137,10 @@ Production voucher assignment runs inside the `commit_matching_run` RPC after su
 | Pool | Production uses `public."Vouchers"` |
 | Dry-run | Uses local CSV `.dryrun.csv` copy; does not consume production vouchers |
 
+Production vouchers are mandatory for subsidized non-Connect matches. If a
+group voucher or any required inbound contingency voucher is unavailable, the
+transaction fails and rolls back all ride, match, flight, and voucher changes.
+
 CSV columns for dry-run/import compatibility: see [Schema → Voucher CSV](schema.md#voucher-csv).
 
 ---

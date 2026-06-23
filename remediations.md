@@ -37,7 +37,7 @@ voucher consumption errors, or corrupted operational state.
 
 **Summary:**
 
-The production path now makes one validated commit request to a transactional Supabase RPC instead of writing rides, matches, flights, vouchers, and Connect cleanup changes one at a time. That RPC is defined in [documentation/sql/001_commit_matching_run.sql](/Users/xmora/Documents/Pickup/ML/documentation/sql/001_commit_matching_run.sql), records each run in `public."MatchingRuns"`, consumes vouchers from `public."Vouchers"` inside the same transaction, and rolls back the whole commit if any required write fails. `Algorithm/connect_merge.py` now only reports cleanup intent, and `Algorithm/vouchers.py` is limited to dry-run CSV voucher assignment. Additional constraints and indexes in [documentation/sql/002_integrity_safeguards.sql](/Users/xmora/Documents/Pickup/ML/documentation/sql/002_integrity_safeguards.sql) protect against orphaned matches, duplicate match rows, and inconsistent voucher state.
+The production path now makes one validated commit request to a transactional Supabase RPC instead of writing rides, matches, flights, vouchers, and Connect cleanup changes one at a time. That RPC is defined in [documentation/sql/001_commit_matching_run.sql](/Users/xmora/Documents/Pickup/ML/documentation/sql/001_commit_matching_run.sql), records each run in `public."MatchingRuns"`, consumes vouchers from `public."Vouchers"` inside the same transaction, and rolls back the whole commit if any required write fails or a required voucher is unavailable. `Algorithm/connect_merge.py` now only reports cleanup intent, and `Algorithm/vouchers.py` is limited to dry-run CSV voucher assignment. Additional constraints and indexes in [documentation/sql/002_integrity_safeguards.sql](/Users/xmora/Documents/Pickup/ML/documentation/sql/002_integrity_safeguards.sql) protect against orphaned matches, duplicate match rows, and inconsistent voucher state.
 
 **Remediation completed:**
 
@@ -54,6 +54,7 @@ The production path now makes one validated commit request to a transactional Su
 - **Transaction and rollback:** Connect cleanup, `Rides`, `Matches`, `Flights`, voucher consumption, and `MatchingRuns` updates are committed together or rolled back together by Postgres.
 - **Retry and idempotency:** transient RPC failures are retried with the same `run_id`; `MatchingRuns.run_id` and `payload_hash` prevent duplicate or conflicting commits.
 - **Voucher protection:** vouchers are selected, locked, marked used, and linked to the committed ride/flight inside the same transaction.
+- **Voucher availability:** subsidized non-Connect groups require a group voucher, and subsidized inbound members require contingency vouchers. A shortage raises an error and rolls back the full run instead of committing subsidized matches with null voucher fields.
 - **Integrity protection:** database constraints/indexes guard against orphaned matches, duplicate flight matches, and inconsistent voucher usage state.
 
 **Policies and permissions:**
@@ -131,11 +132,11 @@ python3 -m py_compile Algorithm/*.py tests/integration_supabase*.py
 
 - `python3 -m unittest discover -s tests -t .`
   - Result: passed
-  - Tests run: 90
+  - Tests run: 95
   - Skipped: 0
 - `python3 -m unittest tests.integration_supabase`
   - Result: passed
-  - Tests in current suite: 19
+  - Tests run: 21
   - Verified live DB voucher import, transactional commit success, `Rides` inserts, `Matches` inserts, `Flights` matched/unmatched updates, voucher consumption/audit fields, `MatchingRuns` ledger updates, idempotent replay, rollback on mid-commit DB failure, Connect cleanup, direct `AlgorithmStatus` behavior, `main.run(...)` lifecycle success/failure scenarios, and persisted cross-midnight `Matches` windows.
 - `python3 Algorithm/import_vouchers.py vouchers/SpringBreak.csv`
   - Result: passed
@@ -146,6 +147,7 @@ python3 -m py_compile Algorithm/*.py tests/integration_supabase*.py
 **Notes for ASPC review:**
 
 - The live Supabase integration tests intentionally touch the configured Supabase database. Generated matching artifacts are removed; the reusable ten-flight scenario parks its dedicated forms for later runs.
+- The updated `001_commit_matching_run.sql` was deployed and the complete 21-test live Supabase suite passed.
 - [documentation/sql/002_integrity_safeguards.sql](/Users/xmora/Documents/Pickup/ML/documentation/sql/002_integrity_safeguards.sql) includes diagnostic SELECTs that should be run before applying the constraint/index section. The constraint/index section should only be applied after diagnostics return no rows.
 
 ## Remediation Issue #2
@@ -171,9 +173,11 @@ Live Supabase integration coverage has been added for the exact side effects nam
 - `tests/integration_supabase_commit.py` covers voucher import and direct `commit_matching_run` RPC side effects.
 - `tests/integration_supabase_pipeline.py` covers direct `AlgorithmStatus` behavior and `main.run(...)` lifecycle side effects.
 - The integration suite removes generated database artifacts; one reusable scenario retains ten dedicated flight fixtures parked on a past date.
+- Shared test teardown closes initialized Supabase HTTP clients so integration runs exit without unclosed-socket warnings.
 - The suite verifies the tracked, non-production `tests/fixtures/TestVouchers.csv` fixture imports into `public."Vouchers"`.
 - Because the voucher fixture is tracked outside the ignored operational `vouchers/` directory, the integration suite has the same input after a clean checkout.
 - The suite verifies `commit_matching_run` inserts `Rides`, inserts `Matches`, updates matched and unmatched `Flights`, consumes vouchers, writes `MatchingRuns`, supports idempotent replay, rolls back on mid-commit failure, and performs Connect cleanup.
+- The suite verifies missing group or contingency voucher inventory rolls back rides, matches, flight updates, run records, and any voucher consumption already attempted in the transaction.
 - The suite verifies direct `AlgorithmStatus` behavior: creating a running row, reusing a due scheduled row, marking success, and marking failure with an error message.
 - The suite verifies `main.run(...)` production behavior for a normal match run, no candidate riders, one rider with no match, Connect enabled without cleanup, Connect merge replacing an existing match/ride, failure before commit, failure during commit, and persisted `Matches` windows for broad, tight, and three-person cross-midnight groups.
 - A ten-flight production-path test verifies seven overlapping LAX forms become one Connect ride, two ONT forms become a separate ride, and one non-overlapping form remains unmatched. It deletes generated matches/rides and reuses the parked forms on later runs.
@@ -197,17 +201,18 @@ python3 -m unittest tests.integration_supabase
 
 **Verification completed:**
 
-- Current live DB suite: 19 tests. The original 18-test suite passed, and the new reusable ten-flight scenario passed on both initial creation and fixture reuse.
+- Current live DB suite: 21 tests, including both voucher-shortage rollback scenarios.
 - Current DB coverage: voucher import, direct `AlgorithmStatus` behavior, `main.run(...)` lifecycle success/no-rider/no-match/Connect/failure scenarios, transactional commit success, idempotent replay, rollback, Connect cleanup, persisted cross-midnight windows, and the ten-flight Connect/ONT/unmatched scenario.
 - `python3 -m unittest discover -s tests -t .`
   - Result: passed
-  - Tests run: 90
+  - Tests run: 95
 
 **Supporting documentation updated:**
 
 - `README.md` now lists the live Supabase integration test command.
 - `documentation/operations.md` separates unit test commands from DB integration test commands.
 - `documentation/code-guide.md` references the explicit live Supabase integration command and split test layout.
+- `tests/test_supabase_cleanup.py` verifies deterministic integration-client cleanup.
 
 ## Remediation Issue #3
 
@@ -226,8 +231,8 @@ python3 -m unittest tests.integration_supabase
 
 **Test results:**
 - `python3 -m unittest tests.test_time_windows tests.test_rule_matching tests.test_commit_payload tests.test_main_csv` - 34 targeted cross-midnight unit tests passed.
-- `python3 -m unittest tests.integration_supabase` - current suite contains 19 live tests.
-- `python3 -m unittest discover -s tests -t .` - 90 tests passed.
+- `python3 -m unittest tests.integration_supabase` - current suite contains 21 live tests.
+- `python3 -m unittest discover -s tests -t .` - 95 tests passed.
 
 **Repository updates:**
 - `Algorithm/time_windows.py`
@@ -259,9 +264,9 @@ python3 -m unittest tests.integration_supabase
 **Note:** LAX and ONT subsidy minimum group sizes are configurable through `SUBSIDY_MIN_GROUP_SIZE` in `Algorithm/config.py`.
 
 **Test results:**
-- `python3 -m unittest discover -s tests -t .` - 90 local tests passed.
+- `python3 -m unittest discover -s tests -t .` - 95 local tests passed.
 - `python3 -m ruff check .` - passed.
-- `python3 -m unittest tests.integration_supabase` - 19 live Supabase tests passed.
+- `python3 -m unittest tests.integration_supabase` - 21 live Supabase tests passed.
 
 **Repository updates:**
 - `Algorithm/rider_data.py`
@@ -293,7 +298,7 @@ python3 -m unittest tests.integration_supabase
 
 **Test results:**
 - `python3 -m ruff check .` - passed locally.
-- `python3 -m unittest discover -s tests -t .` - 90 local tests passed.
+- `python3 -m unittest discover -s tests -t .` - 95 local tests passed.
 - Clean-environment dependency installation and `pip check` passed.
 - `pip-audit` reported no known vulnerabilities in the pinned requirements.
 - Python source compilation and the SQL RPC contract checks passed.
@@ -323,7 +328,7 @@ python3 -m unittest tests.integration_supabase
 **Test results:**
 - Dependency import verification passed for pinned `pandas`, `python-dotenv`, `supabase`, and `ruff`.
 - `python3 -m unittest tests.test_rule_matching tests.test_audit tests.test_main_csv` - 30 targeted tests passed.
-- `python3 -m unittest discover -s tests -t .` - 90 local tests passed.
+- `python3 -m unittest discover -s tests -t .` - 95 local tests passed.
 - `python3 -m ruff check .` - passed.
 
 **Repository updates:**

@@ -15,6 +15,43 @@ import import_vouchers
 from rider_data import RiderLite, normalize_matching_status
 
 
+def close_supabase_client(client) -> None:
+    """Close HTTP sessions initialized by the synchronous Supabase client."""
+    if client is None:
+        return
+
+    components = [
+        client.__dict__.get("auth"),
+        client.__dict__.get("_postgrest"),
+        client.__dict__.get("_storage"),
+        client.__dict__.get("_functions"),
+    ]
+    closed: set[int] = set()
+    for component in components:
+        if component is None:
+            continue
+
+        close = getattr(component, "close", None) or getattr(component, "aclose", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
+            continue
+
+        for attribute in ("session", "_client", "_http_client"):
+            session = getattr(component, attribute, None)
+            if session is None or id(session) in closed:
+                continue
+            closed.add(id(session))
+            close = getattr(session, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    pass
+
+
 class SupabaseIntegrationTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -31,6 +68,7 @@ class SupabaseIntegrationTestCase(unittest.TestCase):
         cls.flight_base = int(cls.run_suffix) % 1_000_000_000_000
         cls.auth_user_ids: list[str] = []
         cls.main = importlib.import_module("main")
+        close_supabase_client(getattr(cls.main, "supabase", None))
         cls.main.supabase = cls.sb
 
     def setUp(self):
@@ -51,13 +89,9 @@ class SupabaseIntegrationTestCase(unittest.TestCase):
                 cls.sb.auth.admin.delete_user(user_id)
             except Exception:
                 pass
-        for closeable in (getattr(cls.sb, "auth", None), cls.sb):
-            close = getattr(closeable, "close", None)
-            if callable(close):
-                try:
-                    close()
-                except Exception:
-                    pass
+        close_supabase_client(cls.sb)
+        if getattr(cls.main, "supabase", None) is cls.sb:
+            cls.main.supabase = None
 
     def _execute(self, query, action):
         try:

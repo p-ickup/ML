@@ -182,18 +182,24 @@ begin
       limit 1
       for update skip locked;
 
-      if v_group_voucher_id is not null then
-        update public."Vouchers"
-        set used = true,
-            used_at = now(),
-            used_by_run_id = p_run_id,
-            assigned_ride_id = v_ride_id,
-            assigned_flight_id = null,
-            updated_at = now()
-        where voucher_id = v_group_voucher_id;
-
-        v_group_vouchers_used := v_group_vouchers_used + 1;
+      if v_group_voucher_id is null then
+        raise exception
+          'No available group voucher for airport %, direction %, ride date %',
+          v_group_airport,
+          case when v_group_to_airport then 'to_airport' else 'from_airport' end,
+          v_ride_date;
       end if;
+
+      update public."Vouchers"
+      set used = true,
+          used_at = now(),
+          used_by_run_id = p_run_id,
+          assigned_ride_id = v_ride_id,
+          assigned_flight_id = null,
+          updated_at = now()
+      where voucher_id = v_group_voucher_id;
+
+      v_group_vouchers_used := v_group_vouchers_used + 1;
     end if;
 
     for member_item in
@@ -217,18 +223,24 @@ begin
         limit 1
         for update skip locked;
 
-        if v_contingency_voucher_id is not null then
-          update public."Vouchers"
-          set used = true,
-              used_at = now(),
-              used_by_run_id = p_run_id,
-              assigned_ride_id = v_ride_id,
-              assigned_flight_id = (member_item->>'flight_id')::int8,
-              updated_at = now()
-          where voucher_id = v_contingency_voucher_id;
-
-          v_contingency_vouchers_used := v_contingency_vouchers_used + 1;
+        if v_contingency_voucher_id is null then
+          raise exception
+            'No available contingency voucher for airport %, direction from_airport, ride date %, flight %',
+            v_group_airport,
+            v_ride_date,
+            member_item->>'flight_id';
         end if;
+
+        update public."Vouchers"
+        set used = true,
+            used_at = now(),
+            used_by_run_id = p_run_id,
+            assigned_ride_id = v_ride_id,
+            assigned_flight_id = (member_item->>'flight_id')::int8,
+            updated_at = now()
+        where voucher_id = v_contingency_voucher_id;
+
+        v_contingency_vouchers_used := v_contingency_vouchers_used + 1;
       end if;
 
       insert into public."Matches" (
@@ -258,7 +270,7 @@ begin
         v_group_voucher_link,
         v_contingency_voucher_link,
         coalesce((member_item->>'is_verified')::boolean, false),
-        coalesce((member_item->>'is_subsidized')::boolean, false),
+        v_group_is_subsidized,
         nullif(member_item->>'uber_type', '')
       );
 
