@@ -61,6 +61,9 @@ class TestVoucherImportTouchesSupabase(SupabaseIntegrationTestCase):
 
 
 class TestCommitMatchingRunTouchesSupabase(SupabaseIntegrationTestCase):
+    VOUCHER_SHORTAGE_DATE = "2099-12-30"
+    VOUCHER_SHORTAGE_AIRPORT = "TST"
+
     def test_commit_success_idempotency_and_voucher_consumption(self):
         user_a = self._create_auth_user("success-a")
         user_b = self._create_auth_user("success-b")
@@ -232,6 +235,176 @@ class TestCommitMatchingRunTouchesSupabase(SupabaseIntegrationTestCase):
         self.assertTrue(all(row["used_at"] is None for row in vouchers))
         self.assertTrue(all(row["used_by_run_id"] is None for row in vouchers))
         self.assertTrue(all(row["assigned_ride_id"] is None for row in vouchers))
+
+    def test_missing_group_voucher_rolls_back_entire_commit(self):
+        user = self._create_auth_user("missing-group-voucher")
+        self._insert_user_profile(user, "missing-group-voucher")
+        flight_id = self.flight_base + 251
+        self._insert_flight(
+            flight_id=flight_id,
+            user_id=user,
+            date=self.VOUCHER_SHORTAGE_DATE,
+        )
+
+        run_id = f"81818181-8181-8181-8181-{int(self.run_suffix) % 1_000_000_000_000:012d}"
+        self.run_ids.append(run_id)
+        payload = self._payload(
+            run_id=run_id,
+            flight_ids=[flight_id],
+            user_ids=[user],
+            is_subsidized=True,
+        )
+        group = payload["groups"][0]
+        group["ride_date"] = self.VOUCHER_SHORTAGE_DATE
+        group["airport"] = self.VOUCHER_SHORTAGE_AIRPORT
+        group["members"][0]["date"] = self.VOUCHER_SHORTAGE_DATE
+
+        rides_before = self._execute(
+            self.sb.table("Rides")
+            .select("ride_id")
+            .eq("ride_date", self.VOUCHER_SHORTAGE_DATE),
+            "count Rides before missing group voucher test",
+        ).data or []
+
+        with self.assertRaisesRegex(Exception, "No available group voucher"):
+            self._rpc(
+                "commit_matching_run",
+                {"p_run_id": run_id, "p_payload": payload},
+                "commit missing group voucher payload",
+            )
+
+        self.assertEqual(
+            self._execute(
+                self.sb.table("MatchingRuns").select("run_id").eq("run_id", run_id),
+                "verify missing group voucher MatchingRuns rollback",
+            ).data or [],
+            [],
+        )
+        self.assertEqual(
+            self._execute(
+                self.sb.table("Matches").select("flight_id").eq("flight_id", flight_id),
+                "verify missing group voucher Matches rollback",
+            ).data or [],
+            [],
+        )
+        rides_after = self._execute(
+            self.sb.table("Rides")
+            .select("ride_id")
+            .eq("ride_date", self.VOUCHER_SHORTAGE_DATE),
+            "count Rides after missing group voucher test",
+        ).data or []
+        self.assertEqual(len(rides_after), len(rides_before))
+        flight = self._execute(
+            self.sb.table("Flights")
+            .select("matching_status,original_unmatched")
+            .eq("flight_id", flight_id),
+            "verify missing group voucher Flight rollback",
+        ).data[0]
+        self.assertEqual(flight["matching_status"], "submitted")
+        self.assertFalse(flight["original_unmatched"])
+
+    def test_missing_contingency_voucher_rolls_back_group_voucher_and_commit(self):
+        user = self._create_auth_user("missing-contingency-voucher")
+        self._insert_user_profile(user, "missing-contingency-voucher")
+        flight_id = self.flight_base + 252
+        self._insert_flight(
+            flight_id=flight_id,
+            user_id=user,
+            date=self.VOUCHER_SHORTAGE_DATE,
+        )
+
+        batch_id = f"82828282-8282-8282-8282-{int(self.run_suffix) % 1_000_000_000_000:012d}"
+        self.import_batch_ids.append(batch_id)
+        voucher_link = f"https://voucher-test.invalid/GROUP-{self.run_suffix}"
+        self._execute(
+            self.sb.table(import_vouchers.VOUCHERS_TABLE).insert(
+                {
+                    "date_start_label": "December 30",
+                    "date_end_label": "December 30",
+                    "start_date": self.VOUCHER_SHORTAGE_DATE,
+                    "end_date": self.VOUCHER_SHORTAGE_DATE,
+                    "contingency": False,
+                    "voucher_link": voucher_link,
+                    "to_airport": False,
+                    "airport": self.VOUCHER_SHORTAGE_AIRPORT,
+                    "used": False,
+                    "used_at": None,
+                    "used_by_run_id": None,
+                    "assigned_ride_id": None,
+                    "assigned_flight_id": None,
+                    "import_batch_id": batch_id,
+                }
+            ),
+            "insert group voucher for contingency shortage test",
+        )
+
+        run_id = f"83838383-8383-8383-8383-{int(self.run_suffix) % 1_000_000_000_000:012d}"
+        self.run_ids.append(run_id)
+        payload = self._payload(
+            run_id=run_id,
+            flight_ids=[flight_id],
+            user_ids=[user],
+            is_subsidized=True,
+        )
+        group = payload["groups"][0]
+        group["ride_date"] = self.VOUCHER_SHORTAGE_DATE
+        group["airport"] = self.VOUCHER_SHORTAGE_AIRPORT
+        group["members"][0]["date"] = self.VOUCHER_SHORTAGE_DATE
+
+        rides_before = self._execute(
+            self.sb.table("Rides")
+            .select("ride_id")
+            .eq("ride_date", self.VOUCHER_SHORTAGE_DATE),
+            "count Rides before missing contingency voucher test",
+        ).data or []
+
+        with self.assertRaisesRegex(Exception, "No available contingency voucher"):
+            self._rpc(
+                "commit_matching_run",
+                {"p_run_id": run_id, "p_payload": payload},
+                "commit missing contingency voucher payload",
+            )
+
+        self.assertEqual(
+            self._execute(
+                self.sb.table("MatchingRuns").select("run_id").eq("run_id", run_id),
+                "verify missing contingency voucher MatchingRuns rollback",
+            ).data or [],
+            [],
+        )
+        self.assertEqual(
+            self._execute(
+                self.sb.table("Matches").select("flight_id").eq("flight_id", flight_id),
+                "verify missing contingency voucher Matches rollback",
+            ).data or [],
+            [],
+        )
+        rides_after = self._execute(
+            self.sb.table("Rides")
+            .select("ride_id")
+            .eq("ride_date", self.VOUCHER_SHORTAGE_DATE),
+            "count Rides after missing contingency voucher test",
+        ).data or []
+        self.assertEqual(len(rides_after), len(rides_before))
+        voucher = self._execute(
+            self.sb.table(import_vouchers.VOUCHERS_TABLE)
+            .select("used,used_at,used_by_run_id,assigned_ride_id,assigned_flight_id")
+            .eq("voucher_link", voucher_link),
+            "verify group voucher rollback after contingency shortage",
+        ).data[0]
+        self.assertFalse(voucher["used"])
+        self.assertIsNone(voucher["used_at"])
+        self.assertIsNone(voucher["used_by_run_id"])
+        self.assertIsNone(voucher["assigned_ride_id"])
+        self.assertIsNone(voucher["assigned_flight_id"])
+        flight = self._execute(
+            self.sb.table("Flights")
+            .select("matching_status,original_unmatched")
+            .eq("flight_id", flight_id),
+            "verify missing contingency voucher Flight rollback",
+        ).data[0]
+        self.assertEqual(flight["matching_status"], "submitted")
+        self.assertFalse(flight["original_unmatched"])
 
     def test_connect_cleanup_replaces_old_match_and_removes_orphaned_old_ride(self):
         user = self._create_auth_user("connect")

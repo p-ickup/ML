@@ -167,7 +167,7 @@ Column definitions: [Schema → CSV outputs](schema.md#local-csv-outputs).
 | Many `no_time_overlap` | Sparse or incompatible windows | Normal for low volume; verify form times in DB |
 | Many `singleton_bucket` | Only one rider in bucket | Need more signups for that airport/day |
 | No vouchers assigned in dry-run | Not subsidized, wrong date, or Connect | Check `subsidized` column + `COVERED_DATES_*` |
-| No vouchers assigned in production | No eligible unused row in `public."Vouchers"` | Check airport/direction/date/contingency fields in `Vouchers` |
+| Production fails with `No available ... voucher` | A subsidized group lacks a required group or contingency voucher | Import enough eligible vouchers, verify airport/direction/date/contingency fields, then rerun |
 | Connect groups missing | Connect disabled or below min size | Check `CONNECT_*` in config |
 | Pickup times look wrong | Group changed after Connect merge | Times refreshed post-merge; check `suggested_time` in CSV |
 | Production error mid-run | Supabase / data issue | Read console + `AlgorithmStatus.error_message`; dry-run again |

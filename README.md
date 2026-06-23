@@ -38,6 +38,9 @@ The import is safe to rerun: existing voucher links and their usage state are
 left unchanged. Confirm the table has enough available vouchers for the run,
 then execute the production command without `--vouchers`.
 
+Production aborts and rolls back the full matching transaction if a subsidized
+non-Connect group cannot obtain its required group or contingency vouchers.
+
 Run tests (stdlib `unittest`, no extra deps) from the repo root:
 
 ```bash

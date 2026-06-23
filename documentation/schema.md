@@ -194,6 +194,10 @@ One row per voucher. Production voucher assignment and consumption happens insid
 `commit_matching_run`, in the same database transaction as ride/match creation,
 flight updates, and Connect cleanup.
 
+Subsidized non-Connect matches cannot commit without their required voucher
+inventory. Missing group or inbound contingency vouchers abort and roll back
+the full transaction.
+
 | Field | Role |
 |-------|------|
 | `voucher_id` | Primary key |

@@ -38,6 +38,31 @@ class TestCommitRpcSqlContract(unittest.TestCase):
         self.assertIn("set matching_status = 'matched'", self.normalized_sql)
         self.assertIn("set matching_status = 'unmatched'", self.normalized_sql)
 
+    def test_rpc_rejects_missing_required_group_voucher(self):
+        self.assertIn(
+            "if v_group_voucher_id is null then raise exception "
+            "'no available group voucher",
+            self.normalized_sql,
+        )
+
+    def test_rpc_rejects_missing_required_contingency_voucher(self):
+        self.assertIn(
+            "if v_contingency_voucher_id is null then raise exception "
+            "'no available contingency voucher",
+            self.normalized_sql,
+        )
+
+    def test_rpc_uses_group_subsidy_as_match_source_of_truth(self):
+        self.assertIn(
+            "coalesce((member_item->>'is_verified')::boolean, false), "
+            "v_group_is_subsidized, nullif(member_item->>'uber_type', '')",
+            self.normalized_sql,
+        )
+        self.assertNotIn(
+            "coalesce((member_item->>'is_subsidized')::boolean, false)",
+            self.normalized_sql,
+        )
+
     def test_rpc_keeps_run_ledger_and_transactional_write_set(self):
         for required_fragment in (
             'insert into public."matchingruns"',
