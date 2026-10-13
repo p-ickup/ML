@@ -131,7 +131,8 @@ def _write_matches_csv(
         row["ride_id_simulated"] = idx
 
     fieldnames = list(rows[0].keys())
-    
+
+    os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -189,7 +190,8 @@ def _write_unmatched_with_reasons(
         row.get("airport") or "",
         row.get("name") or "",
     ))
-    
+
+    os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
     with open(csv_path, "w", newline="") as f:
         import csv
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
