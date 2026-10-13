@@ -17,3 +17,6 @@ __pycache__/
 /matches/
 /vouchers/
 /Archive/
+
+# Local virtualenv
+.venv/
