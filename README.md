@@ -114,10 +114,30 @@ Details: [Operations](documentation/operations.md).
 
 ---
 
+## HTTP service (`service/`)
+
+`Algorithm/main.py` above is a CLI batch job — someone has to run it by hand
+(or on a cron they set up themselves). `service/` wraps the same matching
+logic as a FastAPI app with a `POST /match` endpoint, so the p-ickup admin
+dashboard can trigger a run with a button click instead.
+
+- `service/app/matching/` is a ported, DB-write-free copy of this repo's
+  matching engine (buckets → pair/score/absorb → Connect shuttles). It's
+  read-only: it can fetch riders from Supabase and return proposed groups,
+  but never writes back (no voucher consumption, no Connect-merge, no
+  production commit RPC — those stay batch-job-only, here in `Algorithm/`).
+- Deployed on Vercel (`service/vercel.json` + `service/api/index.py`); see
+  `service/.env.example` for required env vars (`SUPABASE_URL`,
+  `SUPABASE_SECRET_KEY`, optional `SERVICE_API_KEY`).
+- Local dev: `cd service && python3 -m venv venv && ./venv/bin/pip install -r requirements.txt && ./venv/bin/uvicorn app.main:app --reload --port 8000`
+
+---
+
 ## Repository layout
 
 ```text
 Algorithm/        Pipeline code — run main.py from here
+service/          FastAPI wrapper around the same matching engine, deployed on Vercel
 documentation/    Onboarding docs + pipeline diagram
 matches/          Dry-run CSV output
 vouchers/         Dry-run/import voucher pools
