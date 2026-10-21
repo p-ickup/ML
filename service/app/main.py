@@ -18,7 +18,7 @@ logger = logging.getLogger("ml_microservice")
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     logger.info(json.dumps({"event": "matching_engine_ready"}))
     yield
 
