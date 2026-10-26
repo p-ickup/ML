@@ -1,5 +1,8 @@
 # Pickup Matching Pipeline
 
+> [!IMPORTANT]
+> **This repo is archived.** The matching pipeline now lives in the `ML/` folder of [p-ickup/pickup](https://github.com/p-ickup/pickup), with its full history. Open issues and PRs there.
+
 Batch job that groups Pomona students into shared airport rides. Reads unmatched flight signups from Supabase, forms Uber groups (2–5) and optional Connect shuttles (6–24), applies subsidy, writes dry-run review CSVs, or commits production results through a transactional Supabase RPC.
 
 **Entry point:** `Algorithm/main.py`
